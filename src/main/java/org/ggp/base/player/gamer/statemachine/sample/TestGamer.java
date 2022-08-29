@@ -120,8 +120,8 @@ public class TestGamer extends StateMachineGamer
 		this.USE_PLAY_TRANSFER = (Boolean)(params.get(1));
 		this.USE_SELECTION_TRANSFER = (Boolean)(params.get(2));
 		this.USE_ROLLOUT_TRANSFER = (Boolean)(params.get(3));
-		this.PLAY_TRANSFER_RATIO = new Double((String)(params.get(4)));
-		this.SELECTION_TRANSFER_RATIO = new Double((String)(params.get(5)));
+		this.PLAY_TRANSFER_RATIO = (Double) params.get(4);
+		this.SELECTION_TRANSFER_RATIO = (Double) params.get(5);
 		this.SAVE_RULE_GRAPH_TO_FILE = (Boolean)(params.get(6));
 		this.SAVE_MCT_TO_FILE = (Boolean)(params.get(7));
 		this.MCT_READ_DIR = (String)(params.get(8));
