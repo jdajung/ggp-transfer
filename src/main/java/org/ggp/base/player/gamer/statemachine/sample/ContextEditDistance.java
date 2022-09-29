@@ -1184,7 +1184,7 @@ public class ContextEditDistance {
 
 
 	//maps chains of numbers together based on the way that successor functions are mapped
-	//if there are is more than one chain per successor function, then just put together the chains that are the most similar in length
+	//if there is more than one chain per successor function, then just put together the chains that are the most similar in length
 	//(a more sophisticated method would look at the Rule Graph connections into and out of the chain)
 	private void mapNumbers() {
 		HashMap<Integer, List<List<Integer>>> g1ChainsPerFn = new HashMap<Integer, List<List<Integer>>>();

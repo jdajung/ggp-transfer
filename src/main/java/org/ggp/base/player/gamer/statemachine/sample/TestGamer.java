@@ -82,6 +82,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double CERTAINTY_STEEPNESS = 1.0;
 	public static final double STATE_CERTAINTY_OFFSET = 0.8;
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
+	public static final String PLAY_SELECT_MODE = "visits";  //one of "visits", or "reward"
 	public static final String MCT_SAVE_DIR = "MCTs/checkers";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
 
@@ -947,15 +948,33 @@ public class TestGamer extends StateMachineGamer
 			sourceNodeFrom = root.getNearestSourceNode(this.sMap);
 		}
 
+		int maxVisits = 0;
+		if(PLAY_SELECT_MODE.equals("visits")) {
+			for(List<Move> move : root.getChildren().keySet()) {
+				MCTNode currNode = root.getExpandedChild(move, this.existingNodes, SAVE_MCT_TO_FILE);
+				if(currNode.getNumVisits() > maxVisits) {
+					maxVisits = currNode.getNumVisits();
+				}
+			}
+		}
+
     	for(List<Move> move : root.getChildren().keySet()) { //consider the value of each possible child state
     		MCTNode currNode = root.getExpandedChild(move, this.existingNodes, SAVE_MCT_TO_FILE);
     		double currScore = 0;
 
-    		if (currNode.getNumVisits() > 0) {
-    			currScore = currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() / MAX_REWARD_VALUE;
-    			if(currNode.isTerminal() && Math.abs(currNode.getTotalReward().get(this.roleIndex) - MAX_REWARD_VALUE) < FLOAT_THRESH) {
-    				currScore += 1000000;  //if we see an immediate win, just take it
+    		if(PLAY_SELECT_MODE.equals("reward")) {
+	    		if (currNode.getNumVisits() > 0) {
+	    			currScore = currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() / MAX_REWARD_VALUE;
+	    			if(currNode.isTerminal() && Math.abs(currNode.getTotalReward().get(this.roleIndex) - MAX_REWARD_VALUE) < FLOAT_THRESH) {
+	    				currScore += 1000000;  //if we see an immediate win, just take it
+	    			}
+	    		}
+    		} else if(PLAY_SELECT_MODE.equals("visits")){
+    			if(maxVisits > 0) {
+    				currScore = currNode.getNumVisits() / maxVisits;
     			}
+    		} else {
+    			System.out.println("ERROR: Invalid mode for selecting best move.");
     		}
 
     		if(USE_TRANSFER && USE_PLAY_TRANSFER) { // This is where the transfer happens
