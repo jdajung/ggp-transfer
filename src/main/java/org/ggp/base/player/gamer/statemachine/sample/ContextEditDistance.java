@@ -76,6 +76,7 @@ public class ContextEditDistance {
 	public static final float DEPTH_REDUCED_RELATIONSHIP_UNMATCHED_COST = 0;//2;
 	public static final float BASE_ARG_NUM_MISMATCH_COST = 0.1f;
 	public static final float DEPTH_REDUCED_ARG_NUM_MISMATCH_COST = 0;//0.2f;
+	public static final float ARG_DIST_PROPORTION = 0.5f;
 
 	public static final float AVG_COST_WEIGHT = 0.8f;
 	public static final float RAW_NUM_SUCCESSFUL_WEIGHT = 0.18f;
@@ -703,10 +704,25 @@ public class ContextEditDistance {
 					otherVisited.add(other.getBaseNode().getId());
 					float[] occCosts = relationshipListDistance(this.occurrences, other.getOccurrences(), thisVisited, otherVisited, thisNameTable, otherNameTable, 1);
 					float[] argCosts = relationshipListDistance(this.args, other.getArgs(), thisVisited, otherVisited, thisNameTable, otherNameTable, 1);
-					float totalNumChildren = occCosts[1] + argCosts[1];
-					if(totalNumChildren != 0) {
-						costVector[0] += occCosts[0]/totalNumChildren + argCosts[0]/totalNumChildren;
+
+					//Old calulation method weights all nodes equally, not considering how many might be args or occurrences
+//					float totalNumChildren = occCosts[1] + argCosts[1];
+//					if(totalNumChildren != 0) {
+//						costVector[0] += occCosts[0]/totalNumChildren + argCosts[0]/totalNumChildren;
+//					}
+
+					float argProp = ARG_DIST_PROPORTION;
+					float occProp = 1 - argProp;
+					float argTerm = 0;
+					float occTerm = 0;
+					if(argCosts[1] > FLOAT_TOLERANCE) {
+						argTerm = argCosts[0] / argCosts[1];
 					}
+					if(occCosts[1] > FLOAT_TOLERANCE) {
+						occTerm = occCosts[0] / occCosts[1];
+					}
+					costVector[0] += argProp*argTerm + occProp*occTerm;
+
 					costVector[1] += occCosts[1] + argCosts[1];
 					costVector[2] += occCosts[2] + argCosts[2];
 					costVector[3] += occCosts[3] + argCosts[3];
