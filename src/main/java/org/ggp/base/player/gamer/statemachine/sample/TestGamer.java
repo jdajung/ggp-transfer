@@ -82,7 +82,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double CERTAINTY_STEEPNESS = 1.0;
 	public static final double STATE_CERTAINTY_OFFSET = 0.8;
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
-	public static final String PLAY_SELECT_MODE = "visits";  //one of "visits", or "reward"
+	public static final String PLAY_SELECT_MODE = "reward";  //one of "visits", or "reward"
 	public static final String MCT_SAVE_DIR = "MCTs/checkers";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
 
@@ -985,6 +985,9 @@ public class TestGamer extends StateMachineGamer
 	    		currScore = currMoveHeuristic*PLAY_TRANSFER_RATIO + currScore*(1-PLAY_TRANSFER_RATIO);
     		}
 
+    		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getTotalReward().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
+    		System.out.println(ucb1Basic(currNode, this.roleIndex));
+
     		if(bestMove == null || currScore > bestScore+FLOAT_THRESH) {
     			bestMove = move;
     			bestScore = currScore;
@@ -1042,7 +1045,7 @@ public class TestGamer extends StateMachineGamer
     	if(currNode == null) {
     		result = NEW_EXPLORE_VALUE;
     	} else {
-    		double r = currNode.getTotalReward().get(turnIndex) / MAX_REWARD_VALUE;
+    		double r = currNode.getTotalReward().get(turnIndex);
         	double n = currNode.getNumVisits();
         	double bigN = currNode.getTotalParentVisits();
         	double c = EXPLORE_PARAM;
@@ -1059,6 +1062,7 @@ public class TestGamer extends StateMachineGamer
     		result = NEW_EXPLORE_VALUE;
     	} else {
     		result = (r / MAX_REWARD_VALUE)/n + c*Math.sqrt(Math.log(bigN)/n);
+//    		System.out.println("***" + (r / MAX_REWARD_VALUE)/n + " " + c*Math.sqrt(Math.log(bigN)/n));
     	}
 //    	System.out.println(r + " " + n + " " + bigN + " " + c + " " + result);
 		return result;
