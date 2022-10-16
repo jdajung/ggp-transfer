@@ -32,6 +32,7 @@ public class MCTNode {
 	private HashMap<Role, List<Move>> possibleMoves;
 	private HashMap<List<Move>, MCTNode> children;
 	private List<MCTNode> parents;
+	private int numSiblings;
 	private boolean isTerminal;
 	private boolean isExpanded;
 
@@ -88,9 +89,11 @@ public class MCTNode {
 
 
 		this.children = new HashMap<List<Move>, MCTNode>();
+		this.numSiblings = 0;
 		if(parent != null) {
 			this.parents = new ArrayList<MCTNode>();
 			this.parents.add(parent);
+			this.numSiblings = parent.getChildren().keySet().size() - 1;
 		} else {
 			this.parents = null;
 		}
@@ -136,12 +139,27 @@ public class MCTNode {
 		return this.parents;
 	}
 
+	public int getNumSiblings() {
+		return this.numSiblings;
+	}
+
 	public void setParents(List<MCTNode> newParents) {
 		this.parents = newParents;
+		if(newParents != null) {
+			this.numSiblings = 0;
+			for(MCTNode parent : newParents) {
+				if(parent != null) {
+					this.addParent(parent);
+				}
+			}
+		}
 	}
 
 	public void addParent(MCTNode parent) {
 		this.parents.add(parent);
+		if(parent != null) {
+			this.numSiblings = Math.max(this.numSiblings, parent.getChildren().keySet().size() - 1); //This is fast, but possibly inaccurate
+		}
 	}
 
 	public MachineState getState() {

@@ -131,8 +131,8 @@ public class RuleGraphRecord {
 		                	childMap.get(newID).add(childID);
 		                }
 	                }
-	                lineIndex++;
                 }
+                lineIndex++;
             }
 
 	        for (RuleNode node : ruleGraph) {

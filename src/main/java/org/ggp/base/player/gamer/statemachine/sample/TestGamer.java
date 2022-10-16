@@ -75,7 +75,7 @@ public class TestGamer extends StateMachineGamer
 	public static final long TIME_THRESHOLD = 2000;
 	public static final double EXPLORE_PARAM = Math.sqrt(2);
 	public static final double NEW_EXPLORE_VALUE = 1000000;
-	public static final int ROLLOUT_MAX_DEPTH = 200;
+	public static final int ROLLOUT_MAX_DEPTH = 220;
 	public static final double MAX_REWARD_VALUE = 100.0;
 	public static final double DISCOUNT_FACTOR = 0.98;
 	public static final double CERTAINTY_OFFSET = 4.0;
@@ -83,7 +83,8 @@ public class TestGamer extends StateMachineGamer
 	public static final double STATE_CERTAINTY_OFFSET = 0.8;
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
 	public static final String PLAY_SELECT_MODE = "reward";  //one of "visits", or "reward"
-	public static final String MCT_SAVE_DIR = "MCTs/checkers";
+	public static final String RULE_GRAPH_FILE = "connect_four_debug.txt";
+	public static final String MCT_SAVE_DIR = "MCTs/connect_four";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
 
 	public static final double HEURISTIC_WEIGHT = 10.0;
@@ -399,7 +400,7 @@ public class TestGamer extends StateMachineGamer
     	if(USE_TRANSFER) {
     		transferStartTime = System.currentTimeMillis();
 	    	RuleGraphRecord rec = new RuleGraphRecord();
-	    	rec.loadFromFile("checkers_debug.txt", true);  //Load source rule graph from file
+	    	rec.loadFromFile(RULE_GRAPH_FILE, true);  //Load source rule graph from file
 
 	//    	RuleGraphViewer viewer = new RuleGraphViewer(g);
 	//    	viewer.drawRuleGraph();
@@ -809,6 +810,8 @@ public class TestGamer extends StateMachineGamer
 			}
 			outStr += currMCTNode.getNumVisits() + " "; //Print visits to node
 			outStr += currMCTNode.getTotalParentVisits() + " "; //Print total visits to all of node's parents
+			outStr += currMCTNode.getNumSiblings() + " "; //Print number of siblings
+			//***HERE***
 
 			Set<List<Integer>> currState = currMCTNode.getStateSet();
 			for(List<Integer> comp : currState) { //replace whole state components with IDs and add to outStr
@@ -986,7 +989,8 @@ public class TestGamer extends StateMachineGamer
     		}
 
     		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getTotalReward().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
-    		System.out.println(ucb1Basic(currNode, this.roleIndex));
+//    		System.out.println(ucb1Basic(currNode, this.roleIndex));
+//    		System.out.println("# " + currNode.getNumSiblings());
 
     		if(bestMove == null || currScore > bestScore+FLOAT_THRESH) {
     			bestMove = move;
