@@ -94,7 +94,7 @@ public class TestGamer extends StateMachineGamer
 
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
-	public static final long TIME_THRESHOLD = 2000;
+	public static final long TIME_THRESHOLD = 5000;
 	public static final double EXPLORE_PARAM = Math.sqrt(2);
 	public static final double NEW_EXPLORE_VALUE = 1000000;
 	public static final int ROLLOUT_MAX_DEPTH = 220;
@@ -106,7 +106,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
 	public static final String PLAY_SELECT_MODE = "reward";  //one of "visits", or "reward"
 	public static final String RULE_GRAPH_FILE = "checkers_debug.txt";
-	public String MCT_SAVE_DIR = "MCTs/checkers";
+	public static String MCT_SAVE_DIR = "MCTs/checkers";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
 
 	public static final double HEURISTIC_WEIGHT = 10.0;
@@ -117,6 +117,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double FLOAT_THRESH = 0.00001;
 	public static final int WIN_THRESH = 80;
 	public static final int LOSE_THRESH = 20;
+	public static final int MIN_VISITS_FOR_SAVE = 4;
 
 	public TestGamer() {
 		super();
@@ -736,7 +737,7 @@ public class TestGamer extends StateMachineGamer
     			}
     			visitMap.put(currNode.getNumVisits(), visitMap.get(currNode.getNumVisits())+1);
 
-    			if(currNode.getNumVisits() > 1) { //don't bother saving nodes that were only hit once by a rollout
+    			if(currNode.getNumVisits() >= MIN_VISITS_FOR_SAVE) { //don't bother saving nodes that were only hit once by a rollout
 		    		sorted.add(new MCTMerger.PriorityItem<MCTNode>(MCTNodePriorityScore(currNode, maxVisits), currNode));
 		    		if(numNodes >= 0 && sorted.size() > numNodes) {
 		    			sorted.pollLast();  //bump the lowest priority node
