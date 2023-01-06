@@ -106,7 +106,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
 	public static final String PLAY_SELECT_MODE = "reward";  //one of "visits", or "reward"
 	public static final String RULE_GRAPH_FILE = "checkers_debug.txt";
-	public static final String MCT_SAVE_DIR = "MCTs/checkers";
+	public String MCT_SAVE_DIR = "MCTs/checkers";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
 
 	public static final double HEURISTIC_WEIGHT = 10.0;
@@ -167,6 +167,8 @@ public class TestGamer extends StateMachineGamer
 		this.SAVE_MCT_TO_FILE = (Boolean)(params.get(7));
 		this.MCT_READ_DIR = (String)(params.get(8));
 		this.EXPERIMENT_SAVE_DIR = (String)(params.get(9));
+
+		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
 //		System.out.println(params);
 	}
 
