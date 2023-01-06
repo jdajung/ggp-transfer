@@ -1,6 +1,7 @@
 package org.ggp.base.player.gamer.statemachine.sample;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -147,8 +148,13 @@ public class StateMapping {
 
 	//convert a single state from the target game into a set of state components for comparisons
 	public Set<List<Integer>> genTargetStateSet(MachineState mState) {
-		Set<List<Integer>> stateSet = new HashSet<List<Integer>>();
 		Set<GdlSentence> gdl = mState.getContents();
+		return genTargetStateSet(gdl);
+	}
+
+	//convert a list of GDL facts into a set of state components for comparisons
+	public Set<List<Integer>> genTargetStateSet(Set<GdlSentence> gdl) {
+		Set<List<Integer>> stateSet = new HashSet<List<Integer>>();
 		HashMap<String, Integer> nameToID = target.getTopLevelNames();
 
 		for(GdlSentence sentence : gdl) {
@@ -354,6 +360,17 @@ public class StateMapping {
 	}
 
 
+
+	public List<Integer> convertMoveToList(Move targetMove) {
+		List<List<Integer>> converted = convertMoveToList(Arrays.asList(targetMove));
+		if(converted.size() >= 1) {
+			return converted.get(0);
+		} else {
+			return null;
+		}
+	}
+
+
 	//changes types from a Move for each role to a list of IDs for each role
 	public List<List<Integer>> convertMoveToList(List<Move> targetMove) {
 		List<List<Integer>> result = new ArrayList<List<Integer>>();
@@ -443,6 +460,21 @@ public class StateMapping {
 			}
 		}
 		return mappedIndices;
+	}
+
+
+	//given the id of a node in the target game, produce its name (used for debugging)
+	public String getTargetName(int id) {
+		return this.target.getGraph().get(id).getName();
+	}
+
+	//given a list of ids of nodes in the source game, produce a list of their names (used for debugging)
+	public List<String> getTargetName(List<Integer> ids) {
+		List<String> result = new ArrayList<String>();
+		for(int id : ids) {
+			result.add(getTargetName(id));
+		}
+		return result;
 	}
 
 

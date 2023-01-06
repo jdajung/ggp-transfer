@@ -25,15 +25,23 @@ public class MCTNode {
 	private ReducedMCTNode nearestSourceNode;
 	private double percentSharedStates; //how similar is this node to it's nearest, as a percentage of shared state components
 	private int whoseTurn; //-3 if state is terminal, -2 if more than 1 player has multiple choices, -1 if nobody has more than 1 choice, otherwise the role index of the sole player with multiple choices
+	private int whoseTurn2P; //same as whoseTurn, but will attempt to resolve -2 or -1 by checking the parent and assuming it's a 2 player game
 	private int numVisits;
 	private List<Double> totalReward; //list items are rewards for each Role, indexed in the same order as the Roles
+	private List<Integer> goals;
 	private double transferTerm;
 	private double transferDif;
 	private HashMap<Role, List<Move>> possibleMoves;
 	private HashMap<List<Move>, MCTNode> children;
 	private List<MCTNode> parents;
+	private int numParentVisitsOld; //If parent has been set to null, this should contain the number of visits at that time. -1 when unset. Only the root should have null parents and 0 for this value.
+	private int numVisitsOld; //Num visits at the time parent was set to null. -1 when unset.
 	private int numSiblings;
+	private int depth;
+	private List<Integer> nearestWin;
+	private List<Integer> nearestLoss;
 	private boolean isTerminal;
+//	private Set<List<Integer>> terminalFacts;
 	private boolean isExpanded;
 
 	public static final double TRANSFER_TERM_SENTINEL = -9999;
@@ -61,15 +69,44 @@ public class MCTNode {
 		this.nearestSourceNode = null;
 		this.percentSharedStates = 0;
 		this.whoseTurn = MCTNode.determineWhoseTurn(this.machine, this.state);
+		if(this.whoseTurn == -1 || this.whoseTurn == -2) {
+			if(parent != null) {
+				if(parent.getWhoseTurnAssume2P() == 0) {
+					this.whoseTurn2P = 1;
+				} else {
+					this.whoseTurn2P = 0;
+				}
+			} else {
+				this.whoseTurn2P = 0;
+			}
+		} else {
+			this.whoseTurn2P = this.whoseTurn;
+		}
 		this.numVisits = 0;
+		this.numVisitsOld = -1;
+		this.nearestWin = new ArrayList<Integer>();
+		this.nearestLoss = new ArrayList<Integer>();
 		List<Role> allRoles = this.machine.getRoles();
 		this.totalReward = new ArrayList<Double>();
 		for(Role r : allRoles) {
 			this.totalReward.add(0.0);
+			this.nearestWin.add(-1);
+			this.nearestLoss.add(-1);
 		}
+		this.goals = null;
 		this.transferTerm = TRANSFER_TERM_SENTINEL;
 		this.transferDif = TRANSFER_TERM_SENTINEL;
-		this.isTerminal = isTerminal();
+//		Set<GdlSentence> gdlTerminalFacts = machine.isTerminalAnswers(state);
+//		this.isTerminal = gdlTerminalFacts != null;
+//		if(this.isTerminal) {
+//			this.terminalFacts = this.mapping.genTargetStateSet(gdlTerminalFacts);
+//		}
+		this.isTerminal = machine.isTerminal(state);
+
+//		System.out.println(this.isTerminal + " " + gdlTerminalFacts);
+//		if(this.isTerminal) {
+//			System.out.println("* " + this.terminalFacts);
+//		}
 		this.isExpanded = false;
 
 		this.possibleMoves = new HashMap<Role, List<Move>>();
@@ -94,13 +131,21 @@ public class MCTNode {
 			this.parents = new ArrayList<MCTNode>();
 			this.parents.add(parent);
 			this.numSiblings = parent.getChildren().keySet().size() - 1;
+			this.numParentVisitsOld = -1;
+			this.depth = parent.getDepth() + 1;
 		} else {
 			this.parents = null;
+			this.numParentVisitsOld = 0;
+			this.depth = 0;
 		}
 	}
 
 	public int getWhoseTurn() {
 		return this.whoseTurn;
+	}
+
+	public int getWhoseTurnAssume2P() {
+		return this.whoseTurn2P;
 	}
 
 	public int getNumVisits() {
@@ -109,6 +154,26 @@ public class MCTNode {
 
 	public void setNumVisits(int numVisits) {
 		this.numVisits = numVisits;
+	}
+
+	public int getNumVisitsOld() {
+		return this.numVisitsOld;
+	}
+
+	public List<Integer> getNearestWin() {
+		return this.nearestWin;
+	}
+
+	public void setNearestWin(int newNearest, int roleIndex) {
+		this.nearestWin.set(roleIndex, newNearest);
+	}
+
+	public List<Integer> getNearestLoss() {
+		return this.nearestLoss;
+	}
+
+	public void setNearestLoss(int newNearest, int roleIndex) {
+		this.nearestLoss.set(roleIndex, newNearest);
 	}
 
 	public List<Double> getTotalReward() {
@@ -143,7 +208,15 @@ public class MCTNode {
 		return this.numSiblings;
 	}
 
+	public int getDepth() {
+		return this.depth;
+	}
+
 	public void setParents(List<MCTNode> newParents) {
+		if(newParents == null) {
+			this.numParentVisitsOld = this.getTotalParentVisits();
+			this.numVisitsOld = this.getNumVisits();
+		}
 		this.parents = newParents;
 		if(newParents != null) {
 			this.numSiblings = 0;
@@ -209,7 +282,7 @@ public class MCTNode {
 	}
 
 	public boolean isTerminal() {
-		return machine.isTerminal(state);
+		return this.isTerminal;//machine.isTerminal(state);
 	}
 
 	public boolean isExpanded() {
@@ -229,6 +302,8 @@ public class MCTNode {
 			for(MCTNode parent : this.parents) {
 				total += parent.getNumVisits();
 			}
+		} else {
+			total = this.numParentVisitsOld;
 		}
 		return total;
 	}
@@ -322,8 +397,16 @@ public class MCTNode {
 		this.isExpanded = true;
 	}
 
-	public List<Integer> getGoals() throws GoalDefinitionException {
-		return machine.getGoals(state);
+	public List<Integer> getGoals() {
+		if(this.goals == null) {
+			try {
+				this.goals = machine.getGoals(state);
+			} catch (GoalDefinitionException e) {
+				System.out.println("ERROR in getGoals: Looking for goal in non-goal state.");
+				e.printStackTrace();
+			}
+		}
+		return this.goals;
 	}
 
 	public void genMappedState() {

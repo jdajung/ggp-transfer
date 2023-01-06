@@ -5,13 +5,11 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
@@ -37,7 +35,7 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 
-public class TestGamer extends StateMachineGamer
+public class TestGamerSRA extends StateMachineGamer
 {
 	private List<Gdl> rules;
 	private MCTNode root;
@@ -59,26 +57,6 @@ public class TestGamer extends StateMachineGamer
 	private List<HashMap<List<Integer>, Pair<Double, Long>>> specMoveData;
 	private List<HashMap<Integer, Pair<Double, Long>>> genMoveData;
 	private LinkedList<Set<List<Integer>>> stateHistory;
-	private Map<Integer, Map<SymbolCountKey, Set<Integer>>> uniqueSymOccs; //stores unique numbers of occurrences for symbol keys at each depth in the game tree
-	private List<FullRolloutData> symCountData;
-	private Map<Integer, Set<List<Integer>>> playedStates;
-	private Map<SymbolCountKey, SymbolCountGameData> combinedPlayedCounts;
-	private Map<Set<List<Integer>>, Map<SymbolCountKey, Integer>> symCountCache;
-	private Set<SymbolCountKey> usefulSymKeys;
-	private Set<Set<List<Integer>>> seenTerminalStates;
-	private List<MobilityData> mobilityData;
-	private List<Integer> maxMobility;
-	private List<Integer> minMobility;
-	private MobilityData playedMobility;
-	private List<Map<List<Integer>, HistoryData>> historyData;
-	private List<Map<Integer, HistoryData>> genHistoryData;
-	private List<Set<List<Integer>>> playedMoves;
-
-
-	private boolean recordSymOccs = true;
-	private boolean recordMobility = true;
-	private boolean recordNearestWin = true;
-	private boolean recordHistory = true;
 
 	//These are initialization parameters explained in and set by AutoPlayer
 	public boolean USE_TRANSFER;
@@ -115,10 +93,8 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
 
 	public static final double FLOAT_THRESH = 0.00001;
-	public static final int WIN_THRESH = 80;
-	public static final int LOSE_THRESH = 20;
 
-	public TestGamer() {
+	public TestGamerSRA() {
 		super();
 		this.rules = null;
 		this.root = null;
@@ -133,21 +109,6 @@ public class TestGamer extends StateMachineGamer
 		this.tuplesByIndex = new HashMap<Integer, String>();
 		this.indicesByTuple = new HashMap<String, Integer>();
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
-		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
-		this.symCountData = new LinkedList<FullRolloutData>();
-		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
-		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
-		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
-		this.usefulSymKeys = null;
-		this.seenTerminalStates = new HashSet<Set<List<Integer>>>();
-		this.mobilityData = new LinkedList<MobilityData>();
-		this.maxMobility = new ArrayList<Integer>();
-		this.minMobility = new ArrayList<Integer>();
-		this.playedMobility = new MobilityData();
-		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
-		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
-		this.playedMoves = new ArrayList<Set<List<Integer>>>();
-
 
 		this.USE_TRANSFER = false;
 		this.SAVE_RULE_GRAPH_TO_FILE = true;
@@ -435,16 +396,6 @@ public class TestGamer extends StateMachineGamer
 	    	saveRec.saveToFile("last_rule_graph.txt", true);
     	}
 
-    	for(int i=0;i<this.allRoles.size();i++) {
-    		this.playedMobility.numEntriesPerPlayer.add(0);
-    		this.playedMobility.totalMobPerPlayer.add(0f);
-    		this.maxMobility.add(-1000000); //sentinel value
-    		this.minMobility.add(1000000);
-    		this.playedMoves.add(new HashSet<List<Integer>>());
-    		this.historyData.add(new HashMap<List<Integer>, HistoryData>());
-    		this.genHistoryData.add(new HashMap<Integer, HistoryData>());
-    	}
-
     	long transferStartTime = 0;
     	if(USE_TRANSFER) {
     		transferStartTime = System.currentTimeMillis();
@@ -507,25 +458,6 @@ public class TestGamer extends StateMachineGamer
     		for(GdlTerm term : lastMoveTerms) {
     			lastMove.add(new Move(term));
     		}
-
-    		this.playedStates.put(root.getDepth(), root.getStateSet());
-    		if(this.recordSymOccs) {
-	    		Map<SymbolCountKey, Integer> justPlayedSymOcc = getSymOccFromState(root.getStateSet());
-	    		updateSymbolCounts(this.combinedPlayedCounts, justPlayedSymOcc);
-    		}
-    		if(this.recordMobility && root.getDepth() > 0) {
-    			int turnIndex = root.getWhoseTurnAssume2P();
-    			int mobValue = root.getChildren().size() - root.getNumSiblings();
-    			this.playedMobility.totalMobPerPlayer.set(turnIndex, this.playedMobility.totalMobPerPlayer.get(turnIndex) + mobValue);
-    			this.playedMobility.numEntriesPerPlayer.set(turnIndex, this.playedMobility.numEntriesPerPlayer.get(turnIndex) + 1);
-    		}
-    		if(this.recordHistory) {
-    			List<List<Integer>> convertedMove = this.sMap.convertMoveToList(lastMove);
-    			for(int i=0;i<convertedMove.size();i++) {
-    				this.playedMoves.get(i).add(convertedMove.get(i));
-    			}
-    		}
-
     		root = root.getChildren().get(lastMove);
             root.setParents(null);
     	}
@@ -543,8 +475,6 @@ public class TestGamer extends StateMachineGamer
         System.out.println(root.getNumVisits());
         System.out.println(root.getTotalReward());
         System.out.println(getCurrentState().getContents());
-
-        System.out.println("Nearest Win: " + root.getChildren().get(selectedMove).getNearestWin() + " Loss: " + root.getChildren().get(selectedMove).getNearestLoss());
 
 //        notifyObservers(new GamerSelectedMoveEvent(moves, selection, stop - start));
         this.numTurns++;
@@ -566,11 +496,6 @@ public class TestGamer extends StateMachineGamer
     		ArrayList<List<Move>> movesInOrder = new ArrayList<List<Move>>();
     		statesOnPath.add(currNode.getStateSet());
     		pathInOrder.add(currNode);
-    		int numPlayers = this.allRoles.size();
-    		ArrayList<Set<List<Integer>>> movesTaken = new ArrayList<Set<List<Integer>>>();
-    		for(int i=0;i<numPlayers;i++) {
-    			movesTaken.add(new HashSet<List<Integer>>());
-    		}
 
     		while(currNode.isExpanded() && !currNode.isTerminal()) {
     			int turnIndex = currNode.getWhoseTurn();
@@ -578,11 +503,6 @@ public class TestGamer extends StateMachineGamer
     				turnIndex = this.roleIndex;
     			} //turnIndex cannot be -3 because state is not terminal
     			List<Move> selectedMove = selectChild(currNode, turnIndex);
-    			List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
-    			for(int i=0;i<numPlayers;i++) {
-    				movesTaken.get(i).add(convertedMove.get(i));
-    			}
-
     			currNode = currNode.getChildren().get(selectedMove); //, (currentTime - startTime)/(double)duration);
 //    			movesInOrder.add(selectedMove);
     			statesOnPath.add(currNode.getStateSet());
@@ -590,44 +510,18 @@ public class TestGamer extends StateMachineGamer
     		}
     		currNode.expandChildren();
     		if(!currNode.isTerminal()) {
-    			currNode = rollout(currNode, statesOnPath, pathInOrder, movesTaken);
+    			currNode = rollout(currNode, statesOnPath, pathInOrder);
     		}
 
     		if(currNode.isTerminal() ) {
+
     			List<Integer> goals = null;
 				goals = currNode.getGoals();
 				List<Double> goalDoubles = new ArrayList<Double>();
 				for(Integer i : goals) { //convert goal values to double type
 					goalDoubles.add(i.doubleValue());
 				}
-    			backprop(goalDoubles, pathInOrder, currNode);
-
-    			if(this.recordHistory && !this.seenTerminalStates.contains(currNode.getStateSet())) {
-    				for(int i=0;i<numPlayers;i++) {
-    					movesTaken.get(i).addAll(this.playedMoves.get(i));
-    					HashSet<Integer> genSet = new HashSet<Integer>();
-    					for(List<Integer> move : movesTaken.get(i)) {
-    						int genMoveVal = move.get(0);
-    						if(!this.historyData.get(i).containsKey(move)) {
-    							this.historyData.get(i).put(move, new HistoryData());
-    						}
-    						HistoryData currData = this.historyData.get(i).get(move);
-    						currData.numOccs += 1;
-    						currData.totalReward += goals.get(i);
-    						if(!genSet.contains(genMoveVal)) {
-    							if(!this.genHistoryData.get(i).containsKey(genMoveVal)) {
-    								this.genHistoryData.get(i).put(genMoveVal, new HistoryData());
-    							}
-    							HistoryData currGenData = this.genHistoryData.get(i).get(genMoveVal);
-    							currGenData.numOccs += 1;
-    							currGenData.totalReward += goals.get(i);
-    							genSet.add(genMoveVal);
-    						}
-    					}
-    				}
-    			}
-
-    			this.seenTerminalStates.add(currNode.getStateSet());
+    			backprop(goalDoubles, pathInOrder);
     		}
     		currentTime = System.currentTimeMillis();
     	}
@@ -785,16 +679,6 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-
-    public String moveToIDString(List<Integer> move) {
-    	String result = "( ";
-    	for(int item : move) {
-    		result += item + " ";
-    	}
-    	result += ")";
-    	return result;
-    }
-
     //convert a Move into a String of the form "( X Y1 Y2... )" for functions or "X" for constants where Xs and Ys correspond to the ID of the top level node for that name
     //used when writing moves to the MCT file - IDs should match with those in the rule graph file
     public String moveToIDString(Move move) {
@@ -890,151 +774,8 @@ public class TestGamer extends StateMachineGamer
 		}
 
 		LinkedList<MCTNode> q = queueNodes(numNodes);
-		int numRoles = this.getStateMachine().getRoles().size();
-
-		//Symbol Counting Heuristic
-		Map<SymbolCountKey, List<SymbolCountHeurData>> allSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>(); //Inner list contains data for each player
-		if(this.usefulSymKeys == null) {
-			this.usefulSymKeys = trimUnchangingSyms();
-		}
-		for(SymbolCountKey key : this.usefulSymKeys) {
-			for(FullRolloutData gameData : this.symCountData) {
-				if(!allSCData.containsKey(key)) {
-					allSCData.put(key, new ArrayList<SymbolCountHeurData>());
-					for(int i=0;i<numRoles;i++) {
-						allSCData.get(key).add(new SymbolCountHeurData());
-					}
-				}
-				for(int playerNum=0;playerNum<numRoles;playerNum++) {
-					int playerReward = gameData.finalReward.get(playerNum);
-					SymbolCountGameData keyedGameData = gameData.symCountData.get(key);
-					SymbolCountHeurData currData = allSCData.get(key).get(playerNum);
-					if(gameData.symCountData.containsKey(key) && gameData.symCountData.get(key).numSteps > 0) {
-						float symValue = ((float)keyedGameData.totalOcc) / keyedGameData.numSteps;
-						currData.maxValue = Math.max(symValue, currData.maxValue);
-						if(playerReward >= WIN_THRESH) {
-							currData.totalWinValue += symValue;
-							currData.numWins ++;
-						} else if (playerReward <= LOSE_THRESH) {
-							currData.totalLossValue += symValue;
-							currData.numLosses ++;
-						} else {
-							currData.totalOtherValue += symValue;
-							currData.numOther ++;
-						}
-					}
-				}
-			}
-		}
-
-		String symbolCountStr = "";
-		for(SymbolCountKey key : this.usefulSymKeys) {
-			symbolCountStr += key.mainSym + " " + key.parentSym + " " + key.posn + " ";
-			for(int i=0;i<numRoles;i++) {
-				SymbolCountHeurData currData = allSCData.get(key).get(i);
-				symbolCountStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
-						" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " ";
-				if(i < numRoles-1) {
-					symbolCountStr += "& ";
-				}
-			}
-			symbolCountStr += "* ";
-		}
-		symbolCountStr += "\n";
-
-		//Mobility Heuristic
-		List<Float> winMobTotal = new ArrayList<Float>();
-		List<Float> lossMobTotal = new ArrayList<Float>();
-		List<Float> otherMobTotal = new ArrayList<Float>();
-		List<Integer> numWins = new ArrayList<Integer>();
-		List<Integer> numLosses = new ArrayList<Integer>();
-		List<Integer> numOther = new ArrayList<Integer>();
-		for(int i=0;i<numRoles;i++) {
-			winMobTotal.add(0f);
-			lossMobTotal.add(0f);
-			otherMobTotal.add(0f);
-			numWins.add(0);
-			numLosses.add(0);
-			numOther.add(0);
-		}
-		for(MobilityData datum : this.mobilityData) {
-			for(int i=0;i<numRoles;i++) {
-				if(datum.numEntriesPerPlayer.get(i) > 0) {
-					float avg = ((float)datum.totalMobPerPlayer.get(i)) / datum.numEntriesPerPlayer.get(i);
-					int playerReward = datum.finalReward.get(i);
-					if(playerReward >= WIN_THRESH) {
-						winMobTotal.set(i, winMobTotal.get(i) + avg);
-						numWins.set(i, numWins.get(i) + 1);
-					} else if (playerReward <= LOSE_THRESH) {
-						lossMobTotal.set(i, lossMobTotal.get(i) + avg);
-						numLosses.set(i, numLosses.get(i) + 1);
-					} else {
-						otherMobTotal.set(i, otherMobTotal.get(i) + avg);
-						numOther.set(i, numOther.get(i) + 1);
-					}
-				}
-			}
-		}
-
-		String mobilityStr = "";
-		for(int i=0;i<numRoles;i++) {
-			mobilityStr += winMobTotal.get(i) + " " + lossMobTotal.get(i) + " " + otherMobTotal.get(i) + " " + numWins.get(i) +
-					" " + numLosses.get(i) + " " + numOther.get(i) + " " + this.maxMobility.get(i) + " " + this.minMobility.get(i) + " ";
-			if(i < numRoles-1) {
-				mobilityStr += "& ";
-			}
-		}
-		mobilityStr += "\n";
-
-
-		System.out.println("********************");
-//		System.out.println(this.usefulSymKeys);
-//		System.out.println(this.symCountData);
-//		System.out.println(allSCData);
-
-//		for(SymbolCountKey key : this.usefulSymKeys) {
-//			System.out.println(key.toNameString(sMap));
-//			for(int i=0;i<numRoles;i++) {
-//				System.out.println(allSCData.get(key).get(i));
-//			}
-//		}
-
-		for(int i=0;i<numRoles;i++) {
-			System.out.println("Player " + i);
-			System.out.println("Max Mobility: " + this.maxMobility.get(i) + ", Min Mobility: " + this.minMobility.get(i));
-			if(numWins.get(i) > 0) {
-				System.out.println("Avg. Win Mobility: " + winMobTotal.get(i)/numWins.get(i) + ", # Wins: " + numWins.get(i));
-			} else {
-				System.out.println("No win mobility data.");
-			}
-			if(numLosses.get(i) > 0) {
-				System.out.println("Avg. Loss Mobility: " + lossMobTotal.get(i)/numLosses.get(i) + ", # Losses: " + numLosses.get(i));
-			} else {
-				System.out.println("No loss mobility data.");
-			}
-			if(numOther.get(i) > 0) {
-				System.out.println("Avg. Other Mobility: " + otherMobTotal.get(i)/numOther.get(i) + ", # Other: " + numOther.get(i));
-			} else {
-				System.out.println("No other mobility data.");
-			}
-		}
-
-		for(int i=0;i<numRoles;i++) {
-			System.out.println("Player " + i);
-			System.out.println("General History Values:");
-			for(int genValue : this.genHistoryData.get(i).keySet()) {
-				HistoryData currData = this.genHistoryData.get(i).get(genValue);
-				System.out.println(this.sMap.getTargetName(genValue) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
-			}
-			System.out.println("Specific History Values:");
-			for(List<Integer> move : this.historyData.get(i).keySet()) {
-				HistoryData currData = this.historyData.get(i).get(move);
-				System.out.println(this.sMap.getTargetName(move) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
-			}
-		}
-
-
 		int count = 0;
+		int numRoles = this.getStateMachine().getRoles().size();
 		String headerStr = "";
 		String outStr = "";
 		String stateStr = "";
@@ -1046,11 +787,9 @@ public class TestGamer extends StateMachineGamer
 		//Assign IDs to each move seen with a look-up table at the top to save file size
 		int[] nextMoveID = new int[numRoles];
 		List<HashMap<Move, Integer>> moveToID = new ArrayList<HashMap<Move,Integer>>();
-		List<HashMap<List<Integer>, Integer>> convertedMoveToID = new ArrayList<HashMap<List<Integer>, Integer>>();
 		for(int i=0;i<numRoles;i++) {
 			nextMoveID[i] = 0;
 			moveToID.add(new HashMap<Move,Integer>());
-			convertedMoveToID.add(new HashMap<List<Integer>, Integer>());
 			moveIDStr[i] = "";
 		}
 
@@ -1068,10 +807,6 @@ public class TestGamer extends StateMachineGamer
 			outStr += currMCTNode.getTotalParentVisits() + " "; //Print total visits to all of node's parents
 			outStr += currMCTNode.getNumSiblings() + " "; //Print number of siblings
 			outStr += currMCTNode.getNumVisitsOld() + " "; //Print the number of visits at the time the parent was disconnected, if that happened (i.e. if this state was actually played)
-			outStr += currMCTNode.getDepth() + " "; //Print depth of the node in the game tree (root is 0)
-			for(int i=0;i<numRoles;i++) { //Print the distance to the nearest win and loss for each player
-				outStr += currMCTNode.getNearestWin().get(i) + " " + currMCTNode.getNearestLoss().get(i) + " ";
-			}
 
 			Set<List<Integer>> currState = currMCTNode.getStateSet();
 			for(List<Integer> comp : currState) { //replace whole state components with IDs and add to outStr
@@ -1105,7 +840,6 @@ public class TestGamer extends StateMachineGamer
 							currMoveID = nextMoveID[i];
 							nextMoveID[i] += 1;
 							roleMoveToID.put(roleMove, currMoveID);
-							convertedMoveToID.get(i).put(this.sMap.convertMoveToList(roleMove), currMoveID);
 							moveIDStr[i] += currMoveID + " " + moveToIDString(roleMove) + " ";
 						}
 						outStr += currMoveID + " ";
@@ -1170,36 +904,6 @@ public class TestGamer extends StateMachineGamer
 		}
 
 
-		//History Heuristic
-		String specHistoryStr[] = new String[numRoles];
-		String genHistoryStr[] = new String[numRoles];
-		for(int i=0;i<numRoles;i++) {
-			genHistoryStr[i] = "";
-			specHistoryStr[i] = "";
-			for(int genValue : this.genHistoryData.get(i).keySet()) {
-				HistoryData currData = this.genHistoryData.get(i).get(genValue);
-				genHistoryStr[i] += genValue + " " + currData.totalReward + " " + currData.numOccs + " * ";
-			}
-
-			for(List<Integer> move : this.historyData.get(i).keySet()) {
-				int currMoveID;
-				HashMap<List<Integer>, Integer> roleMoveToID = convertedMoveToID.get(i);
-				if(roleMoveToID.containsKey(move)) {
-					currMoveID = roleMoveToID.get(move);
-				} else {
-					currMoveID = nextMoveID[i];
-					nextMoveID[i] += 1;
-					roleMoveToID.put(move, currMoveID);
-					moveIDStr[i] += currMoveID + " " + moveToIDString(move) + " ";
-				}
-				HistoryData currData = this.historyData.get(i).get(move);
-				specHistoryStr[i] += currMoveID + " " + currData.totalReward + " " + currData.numOccs + " * ";
-			}
-		}
-
-
-
-
 		//Write data to file
 		File file = new File(outFileName);
         FileWriter fr = null;
@@ -1210,16 +914,8 @@ public class TestGamer extends StateMachineGamer
             br.write(headerStr);
             br.write(genMoveStr);
             br.write(specMoveStr);
-            br.write(symbolCountStr);
-            br.write(mobilityStr);
             for(int i=0;i<numRoles;i++) {
             	br.write(moveIDStr[i] + "\n");
-            }
-            for(int i=0;i<numRoles;i++) {
-            	br.write(genHistoryStr[i] + "\n");
-            }
-            for(int i=0;i<numRoles;i++) {
-            	br.write(specHistoryStr[i] + "\n");
             }
             br.write(stateStr + "\n");
             br.write(outStr);
@@ -1467,8 +1163,7 @@ public class TestGamer extends StateMachineGamer
 
 
     //Perform a rollout. If Rollout Transfer (R) is enabled, then influence rollouts as described in the "Knowledge Transfer" subsection
-    //movesTaken will be altered by the addition of moves taken during the rollout
-    private MCTNode rollout (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
+    private MCTNode rollout (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder) {
     	MCTNode currNode = startNode;
     	int depth = 0;
     	this.numRollouts ++;
@@ -1503,10 +1198,6 @@ public class TestGamer extends StateMachineGamer
     		} else {
     			selectedMove = randomMove(currNode);
     		}
-    		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
-			for(int i=0;i<convertedMove.size();i++) {
-				movesTaken.get(i).add(convertedMove.get(i));
-			}
     		currNode = currNode.getExpandedChild(selectedMove, this.existingNodes, SAVE_MCT_TO_FILE);
     		statesOnPath.add(currNode.getStateSet());
     		pathInOrder.add(currNode);
@@ -1524,191 +1215,17 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    private Set<SymbolCountKey> trimUnchangingSyms() {
-    	Set<SymbolCountKey> resultList = new HashSet<SymbolCountKey>();
-    	for(int depth : this.uniqueSymOccs.keySet()) {
-    		Map<SymbolCountKey, Set<Integer>> currMap = this.uniqueSymOccs.get(depth);
-    		for(SymbolCountKey key : currMap.keySet()) {
-    			if(currMap.get(key).size() > 1) {
-    				resultList.add(key);
-    			}
-    		}
-    	}
-    	return resultList;
-    }
-
-
     // Do MCTS backpropagation
-    private void backprop (List<Double> reward, ArrayList<MCTNode> pathInOrder, MCTNode terminalNode) {
-    	MCTNode currNode = null;
-    	Map<SymbolCountKey, SymbolCountGameData> gameData = new HashMap<SymbolCountKey, SymbolCountGameData>();
-    	MobilityData mobData = new MobilityData();
-    	List<Integer> finalReward = terminalNode.getGoals();
-    	boolean terminalStateSeen = this.seenTerminalStates.contains(terminalNode.getStateSet());
-    	List<Boolean> terminalWin = new ArrayList<Boolean>();
-    	List<Boolean> terminalLoss = new ArrayList<Boolean>();
-    	int numPlayers = finalReward.size();
-    	mobData.finalReward = finalReward;
-    	for(int goal : finalReward) {
-    		mobData.totalMobPerPlayer.add(0f);
-    		mobData.numEntriesPerPlayer.add(0);
-    		if(goal >= WIN_THRESH) {
-    			terminalWin.add(true);
-    		} else {
-    			terminalWin.add(false);
-    		}
-    		if(goal <= LOSE_THRESH) {
-    			terminalLoss.add(true);
-    		} else {
-    			terminalLoss.add(false);
-    		}
-    	}
-
+    private void backprop (List<Double> reward, ArrayList<MCTNode> pathInOrder) {
     	for(int i=0;i<pathInOrder.size();i++) {
     		int index = pathInOrder.size() - 1 - i;
-    		currNode = pathInOrder.get(index);
-    		int turnIndex = currNode.getWhoseTurnAssume2P();
+    		MCTNode currNode = pathInOrder.get(index);
     		for(int j=0;j<reward.size();j++) {
     			currNode.setTotalReward(j, currNode.getTotalReward().get(j) + Math.pow(DISCOUNT_FACTOR, i)*reward.get(j));
     		}
     		currNode.setNumVisits(currNode.getNumVisits() + 1);
-
-    		if(this.recordSymOccs && !terminalStateSeen) {
-    			updateSymbolOccTrackers(gameData, currNode);
-//    			if(currNode.isTerminal()) {
-//    				finalReward = currNode.getGoals();
-//    			}
-    		}
-
-    		if(this.recordMobility && !terminalStateSeen) {
-    			if(!currNode.isTerminal() && currNode.getDepth() > 0) {
-    				int mobValue = currNode.getChildren().size() - currNode.getNumSiblings();
-    				mobData.totalMobPerPlayer.set(turnIndex, mobData.totalMobPerPlayer.get(turnIndex) + mobValue);
-    				mobData.numEntriesPerPlayer.set(turnIndex, mobData.numEntriesPerPlayer.get(turnIndex) + 1);
-    				if(mobValue > this.maxMobility.get(turnIndex)) {
-    					this.maxMobility.set(turnIndex, mobValue);
-    				}
-    				if(mobValue < this.minMobility.get(turnIndex)) {
-    					this.minMobility.set(turnIndex, mobValue);
-    				}
-    			}
-    		}
-
-    		if(this.recordNearestWin) {
-    			for(int j=0;j<numPlayers;j++) {
-    				int dist = terminalNode.getDepth() - currNode.getDepth();
-    				if(terminalWin.get(j)) {
-    					if(dist < currNode.getNearestWin().get(j) || currNode.getNearestWin().get(j) == -1) {
-    						currNode.setNearestWin(dist, j);
-    					}
-    				}
-    				if(terminalLoss.get(j)) {
-    					if(dist < currNode.getNearestLoss().get(j) || currNode.getNearestLoss().get(j) == -1) {
-    						currNode.setNearestLoss(dist, j);
-    					}
-    				}
-    			}
-    		}
-    	}
-
-    	if(this.recordSymOccs && !terminalStateSeen) {
-	    	//update game data with states that have already been played (not just simulated)
-	    	for(SymbolCountKey playedKey : this.combinedPlayedCounts.keySet()) {
-	    		if(!gameData.containsKey(playedKey)) {
-	    			gameData.put(playedKey, new SymbolCountGameData());
-	    		}
-	    		SymbolCountGameData playedData = this.combinedPlayedCounts.get(playedKey);
-	    		SymbolCountGameData currData = gameData.get(playedKey);
-	    		currData.totalOcc += playedData.totalOcc;
-	    		currData.numSteps += playedData.numSteps;
-	    		currData.maxOcc = Math.max(currData.maxOcc, playedData.maxOcc);
-	    	}
-
-	    	FullRolloutData finalData = new FullRolloutData();
-	    	finalData.symCountData = gameData;
-	    	finalData.finalReward = finalReward;
-	    	this.symCountData.add(finalData);
-    	}
-
-    	if(this.recordMobility && !terminalStateSeen) {
-    		for(int i=0;i<mobData.totalMobPerPlayer.size();i++) {
-    			mobData.totalMobPerPlayer.set(i, mobData.totalMobPerPlayer.get(i) + this.playedMobility.totalMobPerPlayer.get(i));
-    			mobData.numEntriesPerPlayer.set(i, mobData.numEntriesPerPlayer.get(i) + this.playedMobility.numEntriesPerPlayer.get(i));
-    		}
-    		this.mobilityData.add(mobData);
-    	}
-
-//    	if(this.recordNearestWin) {
-//
-//    	}
-    }
-
-
-    public Map<SymbolCountKey, Integer> getSymOccFromState(Set<List<Integer>> stateSet) {
-    	Map<SymbolCountKey, Integer> symbolOccs;
-    	if(this.symCountCache.containsKey(stateSet)) {
-			symbolOccs = this.symCountCache.get(stateSet);
-		} else {
-			symbolOccs = new HashMap<SymbolCountKey, Integer>();
-			//for each symbol at each position in the state, count the total number of occurrences
-			for(List<Integer> fact : stateSet) {
-				int parentValue = -1;
-				for(int posn=0;posn<fact.size();posn++) {
-					int symValue = fact.get(posn);
-					SymbolCountKey currKey = new SymbolCountKey(symValue, parentValue, posn);
-					if(!symbolOccs.containsKey(currKey)) {
-						symbolOccs.put(currKey, 0);
-					}
-					symbolOccs.put(currKey, symbolOccs.get(currKey) + 1);
-
-					if(posn == 0) {
-						parentValue = symValue;
-					}
-				}
-			}
-			this.symCountCache.put(stateSet, symbolOccs);
-		}
-    	return symbolOccs;
-    }
-
-
-    public void updateSymbolOccTrackers(Map<SymbolCountKey, SymbolCountGameData> gameData, MCTNode currNode) {
-		Set<List<Integer>> stateSet = currNode.getStateSet();
-		Map<SymbolCountKey, Integer> symbolOccs = getSymOccFromState(stateSet);
-//		System.out.println(targetStateToString(currNode.getStateSet()));
-
-		for(SymbolCountKey key : symbolOccs.keySet()) {
-			//Add any unique occurrence numbers to the global tracker
-			if(!this.uniqueSymOccs.containsKey(currNode.getDepth())) {
-				this.uniqueSymOccs.put(currNode.getDepth(), new HashMap<SymbolCountKey, Set<Integer>>());
-			}
-			Map<SymbolCountKey, Set<Integer>> uniquesAtDepth = this.uniqueSymOccs.get(currNode.getDepth());
-			if(!uniquesAtDepth.containsKey(key)) {
-				uniquesAtDepth.put(key, new HashSet<Integer>());
-			}
-			Set<Integer> uniques = uniquesAtDepth.get(key);
-			uniques.add(symbolOccs.get(key));
-		}
-
-		updateSymbolCounts(gameData, symbolOccs);
-    }
-
-
-    public void updateSymbolCounts(Map<SymbolCountKey, SymbolCountGameData> gameData, Map<SymbolCountKey, Integer> symbolOccs) {
-    	for(SymbolCountKey key : symbolOccs.keySet()) {
-			if(!gameData.containsKey(key)) {
-				gameData.put(key, new SymbolCountGameData());
-			}
-			SymbolCountGameData currData = gameData.get(key);
-
-			currData.totalOcc += symbolOccs.get(key);
-			currData.numSteps += 1;
-			if(symbolOccs.get(key) > currData.maxOcc) {
-				currData.maxOcc = symbolOccs.get(key);
-			}
     	}
     }
-
 
 
     //Produce a String that represents a state for writing to file
@@ -1749,7 +1266,6 @@ public class TestGamer extends StateMachineGamer
 
     	List<Integer> goals = null;
 		goals = root.getGoals();
-
 		List<Double> goalDoubles = new ArrayList<Double>();
 		for(Integer i : goals) { //convert goal values to double type
 			goalDoubles.add(i.doubleValue());
@@ -1893,19 +1409,6 @@ public class TestGamer extends StateMachineGamer
     	return MyUtil.logistic(x, STATE_CERTAINTY_OFFSET, STATE_CERTAINTY_STEEPNESS);
     }
 
-    public String targetStateToString(Set<List<Integer>> state) {
-		String outStr = "< ";
-		for(List<Integer> fact : state) {
-			outStr += "[ ";
-			for(int word : fact) {
-				outStr += this.sMap.getTargetName(word) + " ";
-			}
-			outStr += "] ";
-		}
-		outStr += ">";
-		return outStr;
-    }
-
 
     @Override
     public String getName() {
@@ -1977,111 +1480,5 @@ public class TestGamer extends StateMachineGamer
     @Override
     public void preview(Game g, long timeout) throws GamePreviewException {
     	System.out.println("Preview was called");
-    }
-
-
-    public static class SymbolCountKey {
-    	public int mainSym;
-    	public int parentSym;
-    	public int posn;
-
-		public SymbolCountKey(int mainSym, int parentSym, int posn) {
-			this.mainSym = mainSym;
-			this.parentSym = parentSym;
-			this.posn = posn;
-		}
-
-		@Override
-		public int hashCode() {
-			final int prime = 31;
-			int result = 1;
-			result = prime * result + mainSym;
-			result = prime * result + parentSym;
-			result = prime * result + posn;
-			return result;
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (obj == null)
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			SymbolCountKey other = (SymbolCountKey) obj;
-			if (mainSym != other.mainSym)
-				return false;
-			if (parentSym != other.parentSym)
-				return false;
-			if (posn != other.posn)
-				return false;
-			return true;
-		}
-
-		public String toNameString(StateMapping mapping) {
-			String outStr = "(";
-			outStr += mapping.getTargetName(parentSym) + " ";
-			outStr += mapping.getTargetName(mainSym) + " ";
-			outStr += posn + ")";
-			return outStr;
-		}
-    }
-
-    public static class SymbolCountGameData {
-    	public int totalOcc = 0;
-    	public int numSteps = 0;
-    	public int maxOcc = 0;
-    }
-
-    public static class FullRolloutData {
-    	public Map<SymbolCountKey, SymbolCountGameData> symCountData = new HashMap<SymbolCountKey, SymbolCountGameData>();
-    	public List<Integer> finalReward = Arrays.asList(-1, -1);
-    }
-
-    public static class MobilityData {
-    	public List<Float> totalMobPerPlayer = new ArrayList<Float>();
-    	public List<Integer> numEntriesPerPlayer = new ArrayList<Integer>();
-    	public List<Integer> finalReward = Arrays.asList(-1, -1);
-    }
-
-    public static class HistoryData {
-    	public int totalReward = 0;
-    	public int numOccs = 0;
-    }
-
-    public static class SymbolCountHeurData {
-    	public float totalWinValue = 0;
-    	public float totalLossValue = 0;
-    	public float totalOtherValue = 0;
-    	public int numWins = 0;
-    	public int numLosses = 0;
-    	public int numOther = 0;
-    	public float maxValue = 0;
-
-    	@Override
-		public String toString() {
-    		String outStr = "";
-    		if(numWins > 0) {
-    			outStr += "win avg: " + totalWinValue/numWins + ", ";
-    		} else {
-    			outStr += "No win data. ";
-    		}
-    		if(numLosses > 0) {
-    			outStr += "loss avg: " + totalLossValue/numLosses + ", ";
-    		} else {
-    			outStr += "No loss data. ";
-    		}
-    		if(numOther > 0) {
-    			outStr += "other avg: " + totalOtherValue/numOther + ", ";
-    		} else {
-    			outStr += "No other data. ";
-    		}
-    		outStr += "# wins: " + numWins + " ";
-    		outStr += "# losses: " + numLosses + " ";
-    		outStr += "# other: " + numOther + " ";
-    		outStr += "max: " + maxValue;
-    		return outStr;
-    	}
     }
 }

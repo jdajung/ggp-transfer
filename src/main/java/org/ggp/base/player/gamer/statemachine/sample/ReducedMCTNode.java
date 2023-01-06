@@ -13,6 +13,7 @@ public class ReducedMCTNode {
 	private int numVisits;
 	private int numParentVisits;
 	private int numSiblings;
+	private int numVisitsOld;
 	private HashMap<List<List<Integer>>, Pair<List<Double>, Integer>> childData;
 
 	public ReducedMCTNode(int id, StateNode stateTree, List<Double> totalReward, int numVisits, int numParentVisits, int numSiblings) {
@@ -23,6 +24,7 @@ public class ReducedMCTNode {
 		this.numVisits = numVisits;
 		this.numParentVisits = numParentVisits;
 		this.numSiblings = numSiblings;
+		this.numVisitsOld = -1;
 		this.childData = new HashMap<List<List<Integer>>, Pair<List<Double>, Integer>>();
 	}
 
@@ -34,7 +36,13 @@ public class ReducedMCTNode {
 		this.numVisits = numVisits;
 		this.numParentVisits = numParentVisits;
 		this.numSiblings = numSiblings;
+		this.numVisitsOld = -1;
 		this.childData = new HashMap<List<List<Integer>>, Pair<List<Double>, Integer>>();
+	}
+
+	public ReducedMCTNode(int id, Set<List<Integer>> stateSet, List<Double> totalReward, int numVisits, int numParentVisits, int numSiblings, int numVisitsOld) {
+		this(id, stateSet, totalReward, numVisits, numParentVisits, numSiblings);
+		this.numVisitsOld = numVisitsOld;
 	}
 
 	public ReducedMCTNode(MCTNode fullNode) {
@@ -43,6 +51,7 @@ public class ReducedMCTNode {
 		this.stateSet = fullNode.getStateSet();
 		this.totalReward = fullNode.getTotalReward();
 		this.numVisits = fullNode.getNumVisits();
+		this.numVisitsOld = fullNode.getNumVisitsOld();
 		this.numParentVisits = fullNode.getTotalParentVisits();
 		this.numSiblings = fullNode.getNumSiblings();
 		this.childData = fullNode.produceChildData();
@@ -53,6 +62,7 @@ public class ReducedMCTNode {
 			System.out.println("WARNING: Attempting to merge two ReducedMCTNodes with different IDs");
 		}
 		this.numVisits += other.numVisits;
+		this.numVisitsOld += other.numVisitsOld;
 		this.numParentVisits += other.numParentVisits;
 		this.numSiblings = Math.max(this.numSiblings, other.numSiblings); //This may not always be exactly accurate, but it is a lot better than adding the numbers together
 		for(int i=0;i<totalReward.size();i++) {
@@ -93,8 +103,16 @@ public class ReducedMCTNode {
 		return numVisits;
 	}
 
+	public int getNumVisitsOld() {
+		return numVisitsOld;
+	}
+
 	public int getNumParentVisits() {
 		return numParentVisits;
+	}
+
+	public int getNumSiblings() {
+		return this.numSiblings;
 	}
 
 	public HashMap<List<List<Integer>>, Pair<List<Double>, Integer>> getChildData() {

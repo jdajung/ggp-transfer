@@ -209,6 +209,7 @@ public class ReducedMCTree {
 		                int numVisits = Integer.parseInt(tok.nextToken());
 		                int numParentVisits = Integer.parseInt(tok.nextToken());
 		                int numSiblings = Integer.parseInt(tok.nextToken());
+		                int numVisitsOld = Integer.parseInt(tok.nextToken());
 
 		                //this block assumes states are represented as lists of components
 		                Set<List<Integer>> newStateList = new HashSet<List<Integer>>();
@@ -226,7 +227,7 @@ public class ReducedMCTree {
 
 //		                System.out.println("*** " + currTok);
 //		                StateNode newStateTree = genStateTreeFromString(currTok); // <---- If you want state trees to work, you need to change this line to something that parses the new state format
-		                ReducedMCTNode newState = new ReducedMCTNode(id, newStateList, totalReward, numVisits, numParentVisits, numSiblings);
+		                ReducedMCTNode newState = new ReducedMCTNode(id, newStateList, totalReward, numVisits, numParentVisits, numSiblings, numVisitsOld);
 
 		                while(tok.hasMoreTokens()) { //read moves after state
 		                	List<Integer> currMoveIDs = new ArrayList<Integer>();
@@ -351,6 +352,7 @@ public class ReducedMCTree {
 			}
 			outStr += currNode.getNumVisits() + " "; //Print visits to node
 			outStr += currNode.getNumParentVisits() + " "; //Print total visits to all of node's parents
+			outStr += currNode.getNumSiblings() + " ";
 
 			Set<List<Integer>> currState = currNode.getStateSet();
 			for(List<Integer> comp : currState) { //replace whole state components with IDs and add to outStr
