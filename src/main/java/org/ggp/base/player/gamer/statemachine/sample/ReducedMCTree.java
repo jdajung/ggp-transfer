@@ -323,7 +323,7 @@ public class ReducedMCTree {
 	}
 
 
-    public int saveToFile(String outFileName) {
+    public int saveToFile(String outFileName, String mctSaveDir) {
 		int count = 0;
 		int numRoles = this.specificMoveTotalData.size();
 		String headerStr = "";
@@ -442,7 +442,7 @@ public class ReducedMCTree {
 
 
 		//Write data to file
-		File file = new File(TestGamer.MCT_SAVE_DIR + "/" + outFileName);
+		File file = new File(mctSaveDir + "/" + outFileName);
         FileWriter fr = null;
         BufferedWriter br = null;
         try{
