@@ -1955,6 +1955,20 @@ public class TestGamer extends StateMachineGamer
 		this.tuplesByIndex = new HashMap<Integer, String>();
 		this.indicesByTuple = new HashMap<String, Integer>();
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
+		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
+		this.symCountData = new LinkedList<FullRolloutData>();
+		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
+		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
+		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
+		this.usefulSymKeys = null;
+		this.seenTerminalStates = new HashSet<Set<List<Integer>>>();
+		this.mobilityData = new LinkedList<MobilityData>();
+		this.maxMobility = new ArrayList<Integer>();
+		this.minMobility = new ArrayList<Integer>();
+		this.playedMobility = new MobilityData();
+		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 
 		System.out.println("All cleaned up.");
     }
@@ -1974,6 +1988,20 @@ public class TestGamer extends StateMachineGamer
 		this.tuplesByIndex = new HashMap<Integer, String>();
 		this.indicesByTuple = new HashMap<String, Integer>();
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
+		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
+		this.symCountData = new LinkedList<FullRolloutData>();
+		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
+		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
+		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
+		this.usefulSymKeys = null;
+		this.seenTerminalStates = new HashSet<Set<List<Integer>>>();
+		this.mobilityData = new LinkedList<MobilityData>();
+		this.maxMobility = new ArrayList<Integer>();
+		this.minMobility = new ArrayList<Integer>();
+		this.playedMobility = new MobilityData();
+		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.playedMoves = new ArrayList<Set<List<Integer>>>();
     }
 
 
