@@ -61,6 +61,8 @@ public class TestGamer extends StateMachineGamer
 	private LinkedList<Set<List<Integer>>> stateHistory;
 	private Map<Integer, Map<SymbolCountKey, Set<Integer>>> uniqueSymOccs; //stores unique numbers of occurrences for symbol keys at each depth in the game tree
 	private List<FullRolloutData> symCountData;
+	private Map<SymbolCountKey, Integer> maxSCVals;
+	private Map<SymbolCountKey, Integer> minSCVals;
 	private Map<Integer, Set<List<Integer>>> playedStates;
 	private Map<SymbolCountKey, SymbolCountGameData> combinedPlayedCounts;
 	private Map<Set<List<Integer>>, Map<SymbolCountKey, Integer>> symCountCache;
@@ -73,6 +75,8 @@ public class TestGamer extends StateMachineGamer
 	private List<Map<List<Integer>, HistoryData>> historyData;
 	private List<Map<Integer, HistoryData>> genHistoryData;
 	private List<Set<List<Integer>>> playedMoves;
+	private Map<SymbolCountKey, List<SymbolCountHeurData>> compiledSCData;
+	private List<MobilityHeurData> compiledMobData;
 
 
 	private boolean recordSymOccs = true;
@@ -136,6 +140,8 @@ public class TestGamer extends StateMachineGamer
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
 		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
 		this.symCountData = new LinkedList<FullRolloutData>();
+		this.maxSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.minSCVals = new HashMap<SymbolCountKey, Integer>();
 		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
 		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
 		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
@@ -148,7 +154,8 @@ public class TestGamer extends StateMachineGamer
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
-
+		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
+		this.compiledMobData = new ArrayList<MobilityHeurData>();
 
 		this.USE_TRANSFER = false;
 		this.SAVE_RULE_GRAPH_TO_FILE = true;
@@ -617,6 +624,13 @@ public class TestGamer extends StateMachineGamer
     						HistoryData currData = this.historyData.get(i).get(move);
     						currData.numOccs += 1;
     						currData.totalReward += goals.get(i);
+    						if(goals.get(i) >= WIN_THRESH) {
+    							currData.numWins += 1;
+    						} else if(goals.get(i) <= LOSE_THRESH) {
+    							currData.numLosses += 1;
+    						} else {
+    							currData.numOther += 1;
+    						}
     						if(!genSet.contains(genMoveVal)) {
     							if(!this.genHistoryData.get(i).containsKey(genMoveVal)) {
     								this.genHistoryData.get(i).put(genMoveVal, new HistoryData());
@@ -624,6 +638,13 @@ public class TestGamer extends StateMachineGamer
     							HistoryData currGenData = this.genHistoryData.get(i).get(genMoveVal);
     							currGenData.numOccs += 1;
     							currGenData.totalReward += goals.get(i);
+    							if(goals.get(i) >= WIN_THRESH) {
+        							currGenData.numWins += 1;
+        						} else if(goals.get(i) <= LOSE_THRESH) {
+        							currGenData.numLosses += 1;
+        						} else {
+        							currGenData.numOther += 1;
+        						}
     							genSet.add(genMoveVal);
     						}
     					}
@@ -634,6 +655,53 @@ public class TestGamer extends StateMachineGamer
     		}
     		currentTime = System.currentTimeMillis();
     	}
+    }
+
+
+//    public float calcHeuristicValue(Move m, MCTNode node, int roleIndex) {
+//
+//    }
+//
+//    public float calcSCValue(MCTNode node, int roleIndex) {
+//
+//    }
+//
+//    public float calcSCWeight(int roleIndex) {
+//
+//    }
+
+    public float calcMobValue(MCTNode node, int roleIndex) {
+    	int currMob = node.getChildren().size() - node.getNumSiblings();
+    	float result = 0;
+    	if(this.compiledMobData.size() > 0) {
+    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
+    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
+    			float winAvg = ((float)data.totalWinValue)/data.numWins;
+    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
+    			float winDist = Math.abs(currMob - winAvg);
+    			float lossDist = Math.abs(currMob - lossAvg);
+    			if(Math.abs(winAvg - lossAvg) > FLOAT_THRESH) { //No useful information if win and lost avgs are equal
+    				result = lossDist / (winDist + lossDist);
+    			}
+    		}
+    	}
+    	return result;
+    }
+
+    public float calcMobWeight(int roleIndex) {
+    	float result = 0;
+    	if(this.compiledMobData.size() > 0) {
+    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
+    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
+    			float winAvg = ((float)data.totalWinValue)/data.numWins;
+    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
+    			float intervalSize = Math.abs(data.maxValue - data.minValue);
+    			if(intervalSize > FLOAT_THRESH) {
+    				result = Math.abs(winAvg - lossAvg) / intervalSize;
+    			}
+    		}
+    	}
+    	return result;
     }
 
 
@@ -884,34 +952,24 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    //give -1 to numNodes to save the whole MCT
-    //returns the number of nodes saved to file
-    //This method saves an MCT to file for one instance of a game. The archives built in the "Archiving Information" subsection will be built from these files.
-    public int saveMctToFile(String outFileName, int numNodes) {
-		if(origRoot == null) {
-			System.out.println("ERROR in saveMctToFile: MCT has not been initialized.");
-		}
-
-		LinkedList<MCTNode> q = queueNodes(numNodes);
-		int numRoles = this.getStateMachine().getRoles().size();
-
-		//Symbol Counting Heuristic
-		Map<SymbolCountKey, List<SymbolCountHeurData>> allSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>(); //Inner list contains data for each player
+    public void compileSCData() {
+    	this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>(); //Inner list contains data for each player
+    	int numRoles = this.allRoles.size();
 		if(this.usefulSymKeys == null) {
 			this.usefulSymKeys = trimUnchangingSyms();
 		}
 		for(SymbolCountKey key : this.usefulSymKeys) {
 			for(FullRolloutData gameData : this.symCountData) {
-				if(!allSCData.containsKey(key)) {
-					allSCData.put(key, new ArrayList<SymbolCountHeurData>());
+				if(!this.compiledSCData.containsKey(key)) {
+					this.compiledSCData.put(key, new ArrayList<SymbolCountHeurData>());
 					for(int i=0;i<numRoles;i++) {
-						allSCData.get(key).add(new SymbolCountHeurData());
+						this.compiledSCData.get(key).add(new SymbolCountHeurData());
 					}
 				}
 				for(int playerNum=0;playerNum<numRoles;playerNum++) {
 					int playerReward = gameData.finalReward.get(playerNum);
 					SymbolCountGameData keyedGameData = gameData.symCountData.get(key);
-					SymbolCountHeurData currData = allSCData.get(key).get(playerNum);
+					SymbolCountHeurData currData = this.compiledSCData.get(key).get(playerNum);
 					if(gameData.symCountData.containsKey(key) && gameData.symCountData.get(key).numSteps > 0) {
 						float symValue = ((float)keyedGameData.totalOcc) / keyedGameData.numSteps;
 						currData.maxValue = Math.max(symValue, currData.maxValue);
@@ -929,65 +987,128 @@ public class TestGamer extends StateMachineGamer
 				}
 			}
 		}
+    }
 
-		String symbolCountStr = "";
-		for(SymbolCountKey key : this.usefulSymKeys) {
-			symbolCountStr += key.mainSym + " " + key.parentSym + " " + key.posn + " ";
-			for(int i=0;i<numRoles;i++) {
-				SymbolCountHeurData currData = allSCData.get(key).get(i);
-				symbolCountStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
-						" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " ";
-				if(i < numRoles-1) {
-					symbolCountStr += "& ";
-				}
-			}
-			symbolCountStr += "* ";
-		}
-		symbolCountStr += "\n";
 
-		//Mobility Heuristic
-		List<Float> winMobTotal = new ArrayList<Float>();
-		List<Float> lossMobTotal = new ArrayList<Float>();
-		List<Float> otherMobTotal = new ArrayList<Float>();
-		List<Integer> numWins = new ArrayList<Integer>();
-		List<Integer> numLosses = new ArrayList<Integer>();
-		List<Integer> numOther = new ArrayList<Integer>();
+    public void compileMobilityData() {
+    	this.compiledMobData = new ArrayList<MobilityHeurData>();
+    	int numRoles = this.allRoles.size();
+
 		for(int i=0;i<numRoles;i++) {
-			winMobTotal.add(0f);
-			lossMobTotal.add(0f);
-			otherMobTotal.add(0f);
-			numWins.add(0);
-			numLosses.add(0);
-			numOther.add(0);
+			this.compiledMobData.add(new MobilityHeurData());
+			this.compiledMobData.get(i).maxValue = this.maxMobility.get(i);
+			this.compiledMobData.get(i).minValue = this.minMobility.get(i);
 		}
 		for(MobilityData datum : this.mobilityData) {
 			for(int i=0;i<numRoles;i++) {
+				MobilityHeurData currHeur = this.compiledMobData.get(i);
 				if(datum.numEntriesPerPlayer.get(i) > 0) {
 					float avg = ((float)datum.totalMobPerPlayer.get(i)) / datum.numEntriesPerPlayer.get(i);
 					int playerReward = datum.finalReward.get(i);
 					if(playerReward >= WIN_THRESH) {
-						winMobTotal.set(i, winMobTotal.get(i) + avg);
-						numWins.set(i, numWins.get(i) + 1);
+						currHeur.totalWinValue += avg;
+						currHeur.numWins += 1;
 					} else if (playerReward <= LOSE_THRESH) {
-						lossMobTotal.set(i, lossMobTotal.get(i) + avg);
-						numLosses.set(i, numLosses.get(i) + 1);
+						currHeur.totalLossValue += avg;
+						currHeur.numLosses += 1;
 					} else {
-						otherMobTotal.set(i, otherMobTotal.get(i) + avg);
-						numOther.set(i, numOther.get(i) + 1);
+						currHeur.totalOtherValue += avg;
+						currHeur.numOther += 1;
 					}
 				}
 			}
 		}
+    }
 
-		String mobilityStr = "";
-		for(int i=0;i<numRoles;i++) {
-			mobilityStr += winMobTotal.get(i) + " " + lossMobTotal.get(i) + " " + otherMobTotal.get(i) + " " + numWins.get(i) +
-					" " + numLosses.get(i) + " " + numOther.get(i) + " " + this.maxMobility.get(i) + " " + this.minMobility.get(i) + " ";
-			if(i < numRoles-1) {
-				mobilityStr += "& ";
+
+    //give -1 to numNodes to save the whole MCT
+    //returns the number of nodes saved to file
+    //This method saves an MCT to file for one instance of a game. The archives built in the "Archiving Information" subsection will be built from these files.
+    public int saveMctToFile(String outFileName, int numNodes) {
+		if(origRoot == null) {
+			System.out.println("ERROR in saveMctToFile: MCT has not been initialized.");
+		}
+
+		LinkedList<MCTNode> q = queueNodes(numNodes);
+		int numRoles = this.allRoles.size();
+
+		//Symbol Counting Heuristic
+//		String symbolCountStr[] = new String[numRoles];
+//		for(int i=0;i<numRoles;i++) {
+//
+//		}
+
+		if(this.usefulSymKeys == null) {
+			this.usefulSymKeys = trimUnchangingSyms();
+		}
+//		for(SymbolCountKey key : this.usefulSymKeys) {
+//			System.out.println(key.toNameString(this.sMap));
+//		}
+
+		String scMaxMinStr = "";
+		String symbolCountStr = "";
+		if(!this.usefulSymKeys.isEmpty()) {
+			for(SymbolCountKey key : this.usefulSymKeys) {
+				scMaxMinStr += key.mainSym + " " + key.parentSym + " " + key.posn + " " + this.maxSCVals.get(key) + " " + this.minSCVals.get(key) + " * ";
+			}
+
+			for(FullRolloutData currData : this.symCountData) {
+				for(int i=0;i<numRoles;i++) {
+					symbolCountStr += currData.finalReward.get(i) + " ";
+				}
+				for(SymbolCountKey key : this.usefulSymKeys) {
+					if(currData.symCountData.containsKey(key)) {
+						SymbolCountGameData value = currData.symCountData.get(key);
+						symbolCountStr += key.mainSym + " " + key.parentSym + " " + key.posn + " " + value.totalOcc + " " + value.numSteps + " # ";
+					}
+				}
+				if(symbolCountStr.charAt(symbolCountStr.length() - 2) == '#') {
+					symbolCountStr = symbolCountStr.substring(0, symbolCountStr.length() - 2);
+					symbolCountStr += "* ";
+				}
 			}
 		}
+		scMaxMinStr += "\n";
+		symbolCountStr += "\n";
+//		this.compileSCData();
+//		Map<SymbolCountKey, List<SymbolCountHeurData>> allSCData = this.compiledSCData;
+//
+//		String symbolCountStr = "";
+//		for(SymbolCountKey key : this.usefulSymKeys) {
+//			symbolCountStr += key.mainSym + " " + key.parentSym + " " + key.posn + " ";
+//			for(int i=0;i<numRoles;i++) {
+//				SymbolCountHeurData currData = allSCData.get(key).get(i);
+//				symbolCountStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
+//						" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " ";
+//				if(i < numRoles-1) {
+//					symbolCountStr += "& ";
+//				}
+//			}
+//			symbolCountStr += "* ";
+//		}
+//		symbolCountStr += "\n";
+
+		//Mobility Heuristic
+//		this.compileMobilityData();
+
+		String mobilityStr = "";
+		for(MobilityData data : this.mobilityData) {
+			for(int i=0;i<numRoles;i++) {
+				mobilityStr += data.finalReward.get(i) + " " + data.totalMobPerPlayer.get(i) + " " + data.numEntriesPerPlayer.get(i) + " ";
+			}
+			mobilityStr += "* ";
+		}
 		mobilityStr += "\n";
+
+//		for(int i=0;i<numRoles;i++) {
+//			MobilityHeurData currData = this.compiledMobData.get(i);
+//			mobilityStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
+//					" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " " + currData.minValue + " ";
+//			if(i < numRoles-1) {
+//				mobilityStr += "& ";
+//			}
+//		}
+//		mobilityStr += "\n";
 
 
 		System.out.println("********************");
@@ -1002,39 +1123,40 @@ public class TestGamer extends StateMachineGamer
 //			}
 //		}
 
-		for(int i=0;i<numRoles;i++) {
-			System.out.println("Player " + i);
-			System.out.println("Max Mobility: " + this.maxMobility.get(i) + ", Min Mobility: " + this.minMobility.get(i));
-			if(numWins.get(i) > 0) {
-				System.out.println("Avg. Win Mobility: " + winMobTotal.get(i)/numWins.get(i) + ", # Wins: " + numWins.get(i));
-			} else {
-				System.out.println("No win mobility data.");
-			}
-			if(numLosses.get(i) > 0) {
-				System.out.println("Avg. Loss Mobility: " + lossMobTotal.get(i)/numLosses.get(i) + ", # Losses: " + numLosses.get(i));
-			} else {
-				System.out.println("No loss mobility data.");
-			}
-			if(numOther.get(i) > 0) {
-				System.out.println("Avg. Other Mobility: " + otherMobTotal.get(i)/numOther.get(i) + ", # Other: " + numOther.get(i));
-			} else {
-				System.out.println("No other mobility data.");
-			}
-		}
+//		for(int i=0;i<numRoles;i++) {
+//			MobilityHeurData currHeur = this.compiledMobData.get(i);
+//			System.out.println("Player " + i);
+//			System.out.println("Max Mobility: " + currHeur.maxValue + ", Min Mobility: " + currHeur.minValue);
+//			if(currHeur.numWins > 0) {
+//				System.out.println("Avg. Win Mobility: " + currHeur.totalWinValue/currHeur.numWins + ", # Wins: " + currHeur.numWins);
+//			} else {
+//				System.out.println("No win mobility data.");
+//			}
+//			if(currHeur.numLosses > 0) {
+//				System.out.println("Avg. Loss Mobility: " + currHeur.totalLossValue/currHeur.numLosses + ", # Losses: " + currHeur.numLosses);
+//			} else {
+//				System.out.println("No loss mobility data.");
+//			}
+//			if(currHeur.numOther > 0) {
+//				System.out.println("Avg. Other Mobility: " + currHeur.totalOtherValue/currHeur.numOther + ", # Other: " + currHeur.numOther);
+//			} else {
+//				System.out.println("No other mobility data.");
+//			}
+//		}
 
-		for(int i=0;i<numRoles;i++) {
-			System.out.println("Player " + i);
-			System.out.println("General History Values:");
-			for(int genValue : this.genHistoryData.get(i).keySet()) {
-				HistoryData currData = this.genHistoryData.get(i).get(genValue);
-				System.out.println(this.sMap.getTargetName(genValue) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
-			}
-			System.out.println("Specific History Values:");
-			for(List<Integer> move : this.historyData.get(i).keySet()) {
-				HistoryData currData = this.historyData.get(i).get(move);
-				System.out.println(this.sMap.getTargetName(move) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
-			}
-		}
+//		for(int i=0;i<numRoles;i++) {
+//			System.out.println("Player " + i);
+//			System.out.println("General History Values:");
+//			for(int genValue : this.genHistoryData.get(i).keySet()) {
+//				HistoryData currData = this.genHistoryData.get(i).get(genValue);
+//				System.out.println(this.sMap.getTargetName(genValue) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
+//			}
+//			System.out.println("Specific History Values:");
+//			for(List<Integer> move : this.historyData.get(i).keySet()) {
+//				HistoryData currData = this.historyData.get(i).get(move);
+//				System.out.println(this.sMap.getTargetName(move) + " avg: " + ((float)currData.totalReward)/currData.numOccs + " #: " + currData.numOccs);
+//			}
+//		}
 
 
 		int count = 0;
@@ -1181,7 +1303,8 @@ public class TestGamer extends StateMachineGamer
 			specHistoryStr[i] = "";
 			for(int genValue : this.genHistoryData.get(i).keySet()) {
 				HistoryData currData = this.genHistoryData.get(i).get(genValue);
-				genHistoryStr[i] += genValue + " " + currData.totalReward + " " + currData.numOccs + " * ";
+				genHistoryStr[i] += genValue + " " + currData.totalReward + " " + currData.numWins + " " + currData.numLosses + " "
+						+ currData.numOther + " " + currData.numOccs + " * ";
 			}
 
 			for(List<Integer> move : this.historyData.get(i).keySet()) {
@@ -1196,7 +1319,8 @@ public class TestGamer extends StateMachineGamer
 					moveIDStr[i] += currMoveID + " " + moveToIDString(move) + " ";
 				}
 				HistoryData currData = this.historyData.get(i).get(move);
-				specHistoryStr[i] += currMoveID + " " + currData.totalReward + " " + currData.numOccs + " * ";
+				specHistoryStr[i] += currMoveID + " " + currData.totalReward + " " + currData.numWins + " " + currData.numLosses + " "
+						+ currData.numOther + " " + currData.numOccs + " * ";
 			}
 		}
 
@@ -1213,6 +1337,7 @@ public class TestGamer extends StateMachineGamer
             br.write(headerStr);
             br.write(genMoveStr);
             br.write(specMoveStr);
+            br.write(scMaxMinStr);
             br.write(symbolCountStr);
             br.write(mobilityStr);
             for(int i=0;i<numRoles;i++) {
@@ -1624,7 +1749,7 @@ public class TestGamer extends StateMachineGamer
 	    		SymbolCountGameData currData = gameData.get(playedKey);
 	    		currData.totalOcc += playedData.totalOcc;
 	    		currData.numSteps += playedData.numSteps;
-	    		currData.maxOcc = Math.max(currData.maxOcc, playedData.maxOcc);
+//	    		currData.maxOcc = Math.max(currData.maxOcc, playedData.maxOcc);
 	    	}
 
 	    	FullRolloutData finalData = new FullRolloutData();
@@ -1706,8 +1831,11 @@ public class TestGamer extends StateMachineGamer
 
 			currData.totalOcc += symbolOccs.get(key);
 			currData.numSteps += 1;
-			if(symbolOccs.get(key) > currData.maxOcc) {
-				currData.maxOcc = symbolOccs.get(key);
+			if(!maxSCVals.containsKey(key) || symbolOccs.get(key) > this.maxSCVals.get(key)) {
+				this.maxSCVals.put(key, symbolOccs.get(key));
+			}
+			if(!minSCVals.containsKey(key) || symbolOccs.get(key) < this.minSCVals.get(key)) {
+				this.minSCVals.put(key, symbolOccs.get(key));
 			}
     	}
     }
@@ -1957,6 +2085,8 @@ public class TestGamer extends StateMachineGamer
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
 		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
 		this.symCountData = new LinkedList<FullRolloutData>();
+		this.maxSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.minSCVals = new HashMap<SymbolCountKey, Integer>();
 		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
 		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
 		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
@@ -1969,6 +2099,8 @@ public class TestGamer extends StateMachineGamer
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
+		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
+		this.compiledMobData = new ArrayList<MobilityHeurData>();
 
 		System.out.println("All cleaned up.");
     }
@@ -1990,6 +2122,8 @@ public class TestGamer extends StateMachineGamer
 		this.stateHistory = new LinkedList<Set<List<Integer>>>();
 		this.uniqueSymOccs = new HashMap<Integer, Map<SymbolCountKey, Set<Integer>>>();
 		this.symCountData = new LinkedList<FullRolloutData>();
+		this.maxSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.minSCVals = new HashMap<SymbolCountKey, Integer>();
 		this.playedStates = new HashMap<Integer, Set<List<Integer>>>();
 		this.combinedPlayedCounts = new HashMap<SymbolCountKey, SymbolCountGameData>();
 		this.symCountCache = new HashMap<Set<List<Integer>>, Map<SymbolCountKey, Integer>>();
@@ -2002,6 +2136,8 @@ public class TestGamer extends StateMachineGamer
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
+		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
+		this.compiledMobData = new ArrayList<MobilityHeurData>();
     }
 
 
@@ -2062,7 +2198,6 @@ public class TestGamer extends StateMachineGamer
     public static class SymbolCountGameData {
     	public int totalOcc = 0;
     	public int numSteps = 0;
-    	public int maxOcc = 0;
     }
 
     public static class FullRolloutData {
@@ -2078,6 +2213,9 @@ public class TestGamer extends StateMachineGamer
 
     public static class HistoryData {
     	public int totalReward = 0;
+    	public int numWins = 0;
+    	public int numLosses = 0;
+    	public int numOther = 0;
     	public int numOccs = 0;
     }
 
@@ -2089,6 +2227,23 @@ public class TestGamer extends StateMachineGamer
     	public int numLosses = 0;
     	public int numOther = 0;
     	public float maxValue = 0;
+    	private float weight = -1f;
+
+    	public float getWeight() {
+    		if (this.weight < 0) {
+    			this.calcWeight();
+    		}
+    		return this.weight;
+    	}
+
+    	public void calcWeight() {
+    		this.weight = 0f;
+    		if(this.numWins > 0 && this.numLosses > 0 && this.maxValue > 0) {
+				float winAvg = this.totalWinValue / this.numWins;
+				float lossAvg = this.totalLossValue / this.numLosses;
+				this.weight = Math.abs(winAvg - lossAvg) / this.maxValue;
+			}
+    	}
 
     	@Override
 		public String toString() {
@@ -2114,5 +2269,16 @@ public class TestGamer extends StateMachineGamer
     		outStr += "max: " + maxValue;
     		return outStr;
     	}
+    }
+
+    public static class MobilityHeurData {
+    	public float totalWinValue = 0;
+    	public float totalLossValue = 0;
+    	public float totalOtherValue = 0;
+    	public int numWins = 0;
+    	public int numLosses = 0;
+    	public int numOther = 0;
+    	public float maxValue = 0;
+    	public float minValue = 0;
     }
 }
