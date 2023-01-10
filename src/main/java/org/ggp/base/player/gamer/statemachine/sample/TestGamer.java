@@ -89,7 +89,8 @@ public class TestGamer extends StateMachineGamer
 	private boolean recordHistory;
 
 	//These are initialization parameters explained in and set by AutoPlayer
-	public boolean USE_TRANSFER;
+	public boolean USE_TRANSFER = false;
+	public boolean ROLLOUT_ORDERING;
 	public boolean USE_PLAY_TRANSFER = false;
 	public boolean NW_ENABLED;
 	public boolean USE_SELECTION_TRANSFER = false;
@@ -180,11 +181,13 @@ public class TestGamer extends StateMachineGamer
 	//This is a janky hack to set parameters that should be set in the constructor
 	//But the GGP library only allows default constructors, so whatever
 	public void initParams(List<?> params) {
-		this.USE_TRANSFER = (Boolean)(params.get(0));
+
+//		this.USE_TRANSFER = (Boolean)(params.get(0));
 //		this.USE_PLAY_TRANSFER = (Boolean)(params.get(1));
-		this.NW_ENABLED = (Boolean)(params.get(1));
+		this.NW_ENABLED = (Boolean)(params.get(0));
 //		this.USE_SELECTION_TRANSFER = (Boolean)(params.get(2));
-		this.SELECTION_HEURISTIC = (Boolean)(params.get(2));
+		this.SELECTION_HEURISTIC = (Boolean)(params.get(1));
+		this.ROLLOUT_ORDERING = (Boolean)(params.get(2));
 //		this.USE_ROLLOUT_TRANSFER = (Boolean)(params.get(3));
 		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
 		this.PLAY_TRANSFER_RATIO = (Double) params.get(4);
@@ -1764,8 +1767,9 @@ public class TestGamer extends StateMachineGamer
 
     		double heuristicWeight = HEURISTIC_INITIAL * Math.pow(HEURISTIC_DECAY, currNode.getNumVisits()-1);
     		double regularWeight = 1 - heuristicWeight;
-    		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false);
+    		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false) / MAX_REWARD_VALUE;
     		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
+    		System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight);
     	}
     	return finalValue + regularExplore;
     }
@@ -1846,6 +1850,57 @@ public class TestGamer extends StateMachineGamer
 
     	return result;
     }
+
+
+//    private MCTNode rolloutHeuristicOrdered (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
+//    	MCTNode currNode = startNode;
+//    	int depth = 0;
+//    	this.numRollouts ++;
+////    	if(this.numRollouts % 10 == 0) {
+////    		System.out.println(this.numRollouts + " rollouts");
+////    	}
+//    	while(!currNode.isTerminal() && depth < ROLLOUT_MAX_DEPTH) {
+//    		currNode.expandChildren();
+//    		List<Move> selectedMove;
+//			double bestScore = 0.0;
+//			List<List<Integer>> bestNearestMove = null;
+//
+//			for(List<Move> currMove : currNode.getChildren().keySet()) { //find a transfer value for each possible move
+//				int turnIndex = currNode.getWhoseTurnAssume2P();
+//				if(turnIndex < 0) {
+//					turnIndex = 0;
+//				}
+//				MCTNode currChild = currNode.getExpandedChild(moveCombo, existingNodes, trackExisting)
+//				double heurScore = this.calcHeuristicValue(selectedMove.get(i), currNode, i, false);
+//				if(currTransfer > bestScore) {
+//					bestScore = currTransfer;
+//					selectedMove = currMove;
+//				}
+//			}
+//
+//			if(selectedMove == null) {
+//				selectedMove = randomMove(currNode);
+//			}
+//
+//    		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
+//			for(int i=0;i<convertedMove.size();i++) {
+//				movesTaken.get(i).add(convertedMove.get(i));
+//			}
+//    		currNode = currNode.getExpandedChild(selectedMove, this.existingNodes, SAVE_MCT_TO_FILE);
+//    		statesOnPath.add(currNode.getStateSet());
+//    		pathInOrder.add(currNode);
+//    		depth++;
+//    	}
+//    	if(depth == ROLLOUT_MAX_DEPTH) {
+//    		System.out.println("ERROR in rollout: max depth exceeded.");
+//    	}
+//
+//    	if(this.numRollouts % 10 == 0) {
+//    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+//    	}
+//
+//    	return currNode;
+//    }
 
 
     private MCTNode rolloutEarlyEval (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
