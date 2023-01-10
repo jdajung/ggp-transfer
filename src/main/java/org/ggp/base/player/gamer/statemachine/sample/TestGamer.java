@@ -83,10 +83,10 @@ public class TestGamer extends StateMachineGamer
 	private List<SimpleRegression> nearestWinRegression;
 
 
-	private boolean recordSymOccs = true;
-	private boolean recordMobility = true;
-	private boolean recordNearestWin = true;
-	private boolean recordHistory = true;
+	private boolean recordSymOccs;
+	private boolean recordMobility;
+	private boolean recordNearestWin;
+	private boolean recordHistory;
 
 	//These are initialization parameters explained in and set by AutoPlayer
 	public boolean USE_TRANSFER;
@@ -517,6 +517,11 @@ public class TestGamer extends StateMachineGamer
     		origRoot = root;
     	}
 
+    	recordSymOccs = true;
+    	recordMobility = true;
+    	recordNearestWin = true;
+    	recordHistory = true;
+
     	startTime = System.currentTimeMillis();
 
     	//Start MCTS
@@ -754,7 +759,10 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight;
-    	double result = (scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight) / totalWeight;
+    	double result = 0;
+    	if(totalWeight > 0) {
+    		result = (scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight) / totalWeight;
+    	}
 
     	if(verbose) {
 	    	System.out.println("*** Heuristic Calculation ***");
@@ -1679,6 +1687,7 @@ public class TestGamer extends StateMachineGamer
     		} else { //if selection transfer is disabled, just use regular UCB1
     			currScore = ucb1Basic(child, turnIndex);
     		}
+
     		if (currScore > bestScore) {
     			bestCombos = new ArrayList<List<Move>>();
     			bestCombos.add(moveCombo);
@@ -1686,7 +1695,9 @@ public class TestGamer extends StateMachineGamer
     		} else if (currScore == bestScore) {
     			bestCombos.add(moveCombo);
     		}
+//    		System.out.println("% " + currScore);
     	}
+//    	System.out.println("%%% " + bestCombos.size() + " " + currNode.getChildren().keySet().size());
     	selectedCombo = bestCombos.get(rand.nextInt(bestCombos.size()));
     	selected = currNode.getExpandedChild(selectedCombo, this.existingNodes, SAVE_MCT_TO_FILE);
 //    	System.out.println("Selected UCB1: " + bestScore + " Reward: " + selected.getTotalReward().get(turnIndex) + " Visits: " + selected.getNumVisits() + " Transfer: " + selected.getTransferTerm());
