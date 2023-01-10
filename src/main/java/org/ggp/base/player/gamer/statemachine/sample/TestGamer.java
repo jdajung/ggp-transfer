@@ -1769,7 +1769,7 @@ public class TestGamer extends StateMachineGamer
     		double regularWeight = 1 - heuristicWeight;
     		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false) / MAX_REWARD_VALUE;
     		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
-    		System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight);
+//    		System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight);
     	}
     	return finalValue + regularExplore;
     }
