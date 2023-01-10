@@ -43,6 +43,7 @@ public class MCTNode {
 	private boolean isTerminal;
 //	private Set<List<Integer>> terminalFacts;
 	private boolean isExpanded;
+	private List<Double> heuristicGoals;
 
 	public static final double TRANSFER_TERM_SENTINEL = -9999;
 	public static final int STATE_TYPE = 1;   //0 for state trees, 1 for lists of components. 0 is deprecated. Don't use 0.
@@ -140,6 +141,14 @@ public class MCTNode {
 		}
 	}
 
+	public List<Double> getHeuristicGoals() {
+		return this.heuristicGoals;
+	}
+
+	public void setHeuristicGoals(List<Double> newGoals) {
+		this.heuristicGoals = newGoals;
+	}
+
 	public int getWhoseTurn() {
 		return this.whoseTurn;
 	}
@@ -206,6 +215,10 @@ public class MCTNode {
 
 	public int getNumSiblings() {
 		return this.numSiblings;
+	}
+
+	public int getMobility2P() { //mobility assuming a 2 player game
+		return this.children.size() - this.numSiblings;
 	}
 
 	public int getDepth() {

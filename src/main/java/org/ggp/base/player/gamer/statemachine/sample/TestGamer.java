@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.apache.commons.math4.legacy.stat.regression.SimpleRegression;
 import org.ggp.base.apps.player.detail.DetailPanel;
 import org.ggp.base.apps.player.detail.SimpleDetailPanel;
 import org.ggp.base.player.gamer.exception.GamePreviewException;
@@ -77,6 +78,9 @@ public class TestGamer extends StateMachineGamer
 	private List<Set<List<Integer>>> playedMoves;
 	private Map<SymbolCountKey, List<SymbolCountHeurData>> compiledSCData;
 	private List<MobilityHeurData> compiledMobData;
+	private List<SCRegressionContainer> scRegression;
+	private List<SimpleRegression> mobRegression;
+	private List<SimpleRegression> nearestWinRegression;
 
 
 	private boolean recordSymOccs = true;
@@ -86,9 +90,12 @@ public class TestGamer extends StateMachineGamer
 
 	//These are initialization parameters explained in and set by AutoPlayer
 	public boolean USE_TRANSFER;
-	public boolean USE_PLAY_TRANSFER;
-	public boolean USE_SELECTION_TRANSFER;
-	public boolean USE_ROLLOUT_TRANSFER;
+	public boolean USE_PLAY_TRANSFER = false;
+	public boolean NW_ENABLED;
+	public boolean USE_SELECTION_TRANSFER = false;
+	public boolean SELECTION_HEURISTIC;
+	public boolean USE_ROLLOUT_TRANSFER = false;
+	public boolean EARLY_ROLLOUT_EVAL;
 	public double PLAY_TRANSFER_RATIO;
 	public double SELECTION_TRANSFER_RATIO;
 	public boolean SAVE_RULE_GRAPH_TO_FILE;
@@ -103,6 +110,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double NEW_EXPLORE_VALUE = 1000000;
 	public static final int ROLLOUT_MAX_DEPTH = 220;
 	public static final double MAX_REWARD_VALUE = 100.0;
+	public static final double MIN_REWARD_VALUE = 0.0;
 	public static final double DISCOUNT_FACTOR = 0.98;
 	public static final double CERTAINTY_OFFSET = 4.0;
 	public static final double CERTAINTY_STEEPNESS = 1.0;
@@ -118,10 +126,14 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_DECAY_PER_VISIT = 0.9;
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
 
+	public static final double HEURISTIC_INITIAL = 0.9;
+	public static final double HEURISTIC_DECAY = 0.9;
+
 	public static final double FLOAT_THRESH = 0.00001;
 	public static final int WIN_THRESH = 80;
 	public static final int LOSE_THRESH = 20;
 	public static final int MIN_VISITS_FOR_SAVE = 4;
+	public static final int ROLLOUT_EVAL_DEPTH = 10;
 
 	public TestGamer() {
 		super();
@@ -156,6 +168,9 @@ public class TestGamer extends StateMachineGamer
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
+		this.scRegression = null;
+		this.mobRegression = null;
+		this.nearestWinRegression = null;
 
 		this.USE_TRANSFER = false;
 		this.SAVE_RULE_GRAPH_TO_FILE = true;
@@ -166,9 +181,12 @@ public class TestGamer extends StateMachineGamer
 	//But the GGP library only allows default constructors, so whatever
 	public void initParams(List<?> params) {
 		this.USE_TRANSFER = (Boolean)(params.get(0));
-		this.USE_PLAY_TRANSFER = (Boolean)(params.get(1));
-		this.USE_SELECTION_TRANSFER = (Boolean)(params.get(2));
-		this.USE_ROLLOUT_TRANSFER = (Boolean)(params.get(3));
+//		this.USE_PLAY_TRANSFER = (Boolean)(params.get(1));
+		this.NW_ENABLED = (Boolean)(params.get(1));
+//		this.USE_SELECTION_TRANSFER = (Boolean)(params.get(2));
+		this.SELECTION_HEURISTIC = (Boolean)(params.get(2));
+//		this.USE_ROLLOUT_TRANSFER = (Boolean)(params.get(3));
+		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
 		this.PLAY_TRANSFER_RATIO = (Double) params.get(4);
 		this.SELECTION_TRANSFER_RATIO = (Double) params.get(5);
 		this.SAVE_RULE_GRAPH_TO_FILE = (Boolean)(params.get(6));
@@ -503,6 +521,22 @@ public class TestGamer extends StateMachineGamer
 
     	//Start MCTS
     	buildTreeForTime(timeout);
+
+    	System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+    	long heurTimeStart = System.currentTimeMillis();
+    	this.prepHeuristics();
+    	long heurTimeEnd = System.currentTimeMillis();
+    	this.recordSymOccs = false;
+    	this.recordMobility = false;
+    	this.recordHistory = false;
+    	System.out.println(heurTimeEnd - heurTimeStart);
+    	System.out.println("SC: " + this.scRegression.get(0).toNameString(this.sMap));
+    	System.out.println("Gen History:");
+    	for(int moveID : this.genHistoryData.get(0).keySet()) {
+    		HistoryData data = this.genHistoryData.get(0).get(moveID);
+    		System.out.println(this.sMap.getTargetName(moveID) + ": " + ((double)data.totalReward) / data.numOccs);
+    	}
+    	System.out.println();
     }
 
 
@@ -554,7 +588,7 @@ public class TestGamer extends StateMachineGamer
         System.out.println(root.getTotalReward());
         System.out.println(getCurrentState().getContents());
 
-        System.out.println("Nearest Win: " + root.getChildren().get(selectedMove).getNearestWin() + " Loss: " + root.getChildren().get(selectedMove).getNearestLoss());
+//        System.out.println("Nearest Win: " + root.getChildren().get(selectedMove).getNearestWin() + " Loss: " + root.getChildren().get(selectedMove).getNearestLoss());
 
 //        notifyObservers(new GamerSelectedMoveEvent(moves, selection, stop - start));
         this.numTurns++;
@@ -600,18 +634,29 @@ public class TestGamer extends StateMachineGamer
     		}
     		currNode.expandChildren();
     		if(!currNode.isTerminal()) {
-    			currNode = rollout(currNode, statesOnPath, pathInOrder, movesTaken);
+    			if(!EARLY_ROLLOUT_EVAL || this.scRegression == null) {
+    				currNode = rollout(currNode, statesOnPath, pathInOrder, movesTaken);
+    			} else {
+    				currNode = rolloutEarlyEval(currNode, statesOnPath, pathInOrder, movesTaken);
+    			}
     		}
 
+    		List<Integer> goals = null;
+    		List<Double> goalDoubles;
     		if(currNode.isTerminal() ) {
-    			List<Integer> goals = null;
 				goals = currNode.getGoals();
-				List<Double> goalDoubles = new ArrayList<Double>();
+				goalDoubles = new ArrayList<Double>();
 				for(Integer i : goals) { //convert goal values to double type
 					goalDoubles.add(i.doubleValue());
 				}
-    			backprop(goalDoubles, pathInOrder, currNode);
+				backprop(goalDoubles, pathInOrder, currNode);
+    		} else {
+    			goalDoubles = currNode.getHeuristicGoals();
+    			earlyBackprop(goalDoubles, pathInOrder);
+    		}
 
+
+			if(currNode.isTerminal() ) {
     			if(this.recordHistory && !this.seenTerminalStates.contains(currNode.getStateSet())) {
     				for(int i=0;i<numPlayers;i++) {
     					movesTaken.get(i).addAll(this.playedMoves.get(i));
@@ -657,10 +702,73 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
+    public static double clampRewardVal(double val) {
+    	if(val < MIN_REWARD_VALUE) {
+    		return MIN_REWARD_VALUE;
+    	} else if(val > MAX_REWARD_VALUE) {
+    		return MAX_REWARD_VALUE;
+    	} else {
+    		return val;
+    	}
+    }
 
-//    public float calcHeuristicValue(Move m, MCTNode node, int roleIndex) {
-//
-//    }
+    public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, boolean verbose) {
+    	List<Integer> moveList = this.sMap.convertMoveToList(m);
+    	int genID = moveList.get(0);
+
+    	Map<SymbolCountKey, Integer> symCounts = this.getSymOccFromState(node.getStateSet());
+    	PredictionPackage scPackage = this.scRegression.get(roleIndex).combinedPredict(symCounts);
+    	double scVal = scPackage.prediction;
+    	double scWeight = scPackage.maxR;
+
+    	double mobVal = clampRewardVal(this.mobRegression.get(roleIndex).predict(node.getMobility2P()));
+    	double mobWeight = Math.abs(this.mobRegression.get(roleIndex).getR());
+
+    	double nearestWinVal = 0;
+    	double nearestWinWeight = 0;
+    	if(NW_ENABLED) {
+	    	int nearestWin = node.getNearestWin().get(roleIndex);
+	    	if(nearestWin >= 0) {
+	    		nearestWinVal = clampRewardVal(this.nearestWinRegression.get(roleIndex).predict(nearestWin));
+	    		nearestWinWeight = Math.abs(this.nearestWinRegression.get(roleIndex).getR());
+	    	}
+    	}
+
+    	double genHistVal = 0;
+    	double genHistWeight = 0;
+    	double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
+    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
+    	if(this.genHistoryData.get(roleIndex).containsKey(genID)) {
+    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+    		genHistVal = ((double)data.totalReward) / data.numOccs;
+//    		genHistWeight = Math.pow(Math.abs(genHistVal - midVal)/divisor, 2);
+    		genHistWeight = Math.abs(genHistVal - midVal)/divisor;
+    	}
+
+    	double specHistVal = 0;
+    	double specHistWeight = 0;
+    	if(this.historyData.get(roleIndex).containsKey(moveList)) {
+    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
+    		specHistVal = ((double)data.totalReward) / data.numOccs;
+    		specHistWeight = Math.abs(specHistVal - midVal)/divisor;
+    	}
+
+    	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight;
+    	double result = (scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight) / totalWeight;
+
+    	if(verbose) {
+	    	System.out.println("*** Heuristic Calculation ***");
+	    	System.out.println(result);
+	    	System.out.println("SC: " + scVal + " " + scWeight);
+	    	System.out.println("Mob: " + mobVal + " " + mobWeight + " " + node.getMobility2P() + " " + this.mobRegression.get(roleIndex).predict(node.getMobility2P()));
+	    	System.out.println("NW: " + nearestWinVal + " " + nearestWinWeight);
+	    	System.out.println("Gen Hist: " + genHistVal + " " + genHistWeight);
+	    	System.out.println("Spec Hist: " + specHistVal + " " + specHistWeight);
+	    	System.out.println("");
+    	}
+
+    	return result;
+    }
 //
 //    public float calcSCValue(MCTNode node, int roleIndex) {
 //
@@ -670,34 +778,145 @@ public class TestGamer extends StateMachineGamer
 //
 //    }
 
-    public float calcMobValue(MCTNode node, int roleIndex) {
-    	int currMob = node.getChildren().size() - node.getNumSiblings();
-    	float result = 0;
-    	if(this.compiledMobData.size() > 0) {
-    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
-    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
-    			float winAvg = ((float)data.totalWinValue)/data.numWins;
-    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
-    			float winDist = Math.abs(currMob - winAvg);
-    			float lossDist = Math.abs(currMob - lossAvg);
-    			if(Math.abs(winAvg - lossAvg) > FLOAT_THRESH) { //No useful information if win and lost avgs are equal
-    				result = lossDist / (winDist + lossDist);
+    public void prepHeuristics() {
+    	this.usefulSymKeys = trimUnchangingSyms();
+    	this.scRegression = new ArrayList<SCRegressionContainer>();
+    	this.mobRegression = new ArrayList<SimpleRegression>();
+    	this.nearestWinRegression = new ArrayList<SimpleRegression>();
+    	for(int i=0; i<this.allRoles.size(); i++) {
+    		this.scRegression.add(doSCRegression(this.symCountData, this.usefulSymKeys, i));
+    		this.mobRegression.add(doMobilityRegression(this.mobilityData, i));
+    		this.nearestWinRegression.add(doNearestWinRegression(this.root, i));
+    	}
+    }
+
+//    public float calcMobValue(MCTNode node, int roleIndex) {
+//    	int currMob = node.getChildren().size() - node.getNumSiblings();
+//    	float result = 0;
+//    	if(this.compiledMobData.size() > 0) {
+//    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
+//    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
+//    			float winAvg = ((float)data.totalWinValue)/data.numWins;
+//    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
+//    			float winDist = Math.abs(currMob - winAvg);
+//    			float lossDist = Math.abs(currMob - lossAvg);
+//    			if(Math.abs(winAvg - lossAvg) > FLOAT_THRESH) { //No useful information if win and lost avgs are equal
+//    				result = lossDist / (winDist + lossDist);
+//    			}
+//    		}
+//    	}
+//    	return result;
+//    }
+//
+//    public float calcMobWeight(int roleIndex) {
+//    	float result = 0;
+//    	if(this.compiledMobData.size() > 0) {
+//    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
+//    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
+//    			float winAvg = ((float)data.totalWinValue)/data.numWins;
+//    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
+//    			float intervalSize = Math.abs(data.maxValue - data.minValue);
+//    			if(intervalSize > FLOAT_THRESH) {
+//    				result = Math.abs(winAvg - lossAvg) / intervalSize;
+//    			}
+//    		}
+//    	}
+//    	return result;
+//    }
+
+
+    public static SCRegressionContainer doSCRegression(List<FullRolloutData> scData, Set<SymbolCountKey> usefulKeys, int roleIndex) {
+    	SCRegressionContainer container = new SCRegressionContainer();
+    	for(FullRolloutData data : scData) {
+    		int reward = data.finalReward.get(roleIndex);
+    		for(SymbolCountKey key : usefulKeys) {
+    			if(data.symCountData.containsKey(key)) {
+    				SymbolCountGameData curr = data.symCountData.get(key);
+    				if(curr.numSteps > 0) {
+	    				if(!container.regMap.containsKey(key)) {
+	    					container.regMap.put(key, new SimpleRegression());
+	    					container.occMap.put(key, 0);
+	    				}
+	    				double x = ((double)curr.totalOcc) / curr.numSteps;
+	    				double y = reward;
+	    				container.regMap.get(key).addData(x, y);
+	    				container.occMap.put(key, container.occMap.get(key) + 1); //weighting based on number of rollouts it appeared in
+    				}
     			}
     		}
     	}
-    	return result;
+
+    	double sumR = 0;
+    	int totalWeight = 0;
+    	for(SymbolCountKey key : container.regMap.keySet()) {
+    		SimpleRegression currReg = container.regMap.get(key);
+    		double currWeight = container.occMap.get(key);
+    		sumR += currReg.getR() * currWeight;
+    		totalWeight += currWeight;
+    	}
+    	container.avgR = sumR / totalWeight;
+    	container.totalOcc = totalWeight;
+
+    	return container;
     }
 
-    public float calcMobWeight(int roleIndex) {
-    	float result = 0;
-    	if(this.compiledMobData.size() > 0) {
-    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
-    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
-    			float winAvg = ((float)data.totalWinValue)/data.numWins;
-    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
-    			float intervalSize = Math.abs(data.maxValue - data.minValue);
-    			if(intervalSize > FLOAT_THRESH) {
-    				result = Math.abs(winAvg - lossAvg) / intervalSize;
+
+    public static SimpleRegression doMobilityRegression(List<MobilityData> mobData, int roleIndex) {
+    	SimpleRegression reg = new SimpleRegression();
+    	for(MobilityData currData : mobData) {
+    		if(currData.numEntriesPerPlayer.get(roleIndex) > 0) {
+    			double x = currData.totalMobPerPlayer.get(roleIndex) / currData.numEntriesPerPlayer.get(roleIndex);
+    			double y = currData.finalReward.get(roleIndex);
+    			reg.addData(x, y);
+    		}
+    	}
+    	return reg;
+    }
+
+
+    public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex) {
+    	List<MCTNode> allNodes = queueNoPriority(-1, root);
+    	SimpleRegression reg = new SimpleRegression();
+    	for(MCTNode currNode : allNodes) {
+    		double x = currNode.getNearestWin().get(roleIndex);
+    		if(x >= 0) {
+    			double y = currNode.getTotalReward().get(roleIndex) / currNode.getNumVisits();
+    			reg.addData(x, y);
+    		}
+    	}
+    	return reg;
+    }
+
+
+//    public static GenHistoryRegressionContainer doGenHistoryRegression(List<Map<Integer, HistoryData>> histData, int roleIndex) {
+//    	GenHistoryRegressionContainer container = new GenHistoryRegressionContainer();
+//    	for(int moveID : histData.get(roleIndex).keySet()) {
+//    		HistoryData currData = histData.get(roleIndex).get(moveID);
+//    		if(!container.regMap.containsKey(moveID)) {
+//    			container.regMap.put(moveID, new SimpleRegression());
+//    		}
+//    		SimpleRegression reg = container.regMap.get(moveID);
+//
+//    	}
+//    }
+
+
+    //Just put all the nodes in the subtree rooted at root into a List with no particular ordering
+    public static LinkedList<MCTNode> queueNoPriority(int numNodes, MCTNode root) {
+    	LinkedList<MCTNode> result = new LinkedList<MCTNode>();
+    	LinkedList<MCTNode> q = new LinkedList<MCTNode>();
+//    	HashSet<Set<List<Integer>>> usedStates = new HashSet<Set<List<Integer>>>();
+    	q.add(root);
+
+    	while(!q.isEmpty()) {
+    		MCTNode currNode = q.pop();
+    		result.add(currNode);
+    		if(numNodes >= 0 && result.size() >= numNodes) {
+    			break;
+    		}
+    		for(MCTNode child : currNode.getChildren().values()) {
+    			if(child != null) {
+    				q.addLast(child);
     			}
     		}
     	}
@@ -1426,6 +1645,9 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	System.out.println("Best Score: " + bestScore + " " + bestMove);
+    	if(this.scRegression != null) {
+    		this.calcHeuristicValue(bestMove.get(roleIndex), this.root.getChildren().get(bestMove), this.roleIndex, true);
+    	}
     	return bestMove;
     }
 
@@ -1452,6 +1674,8 @@ public class TestGamer extends StateMachineGamer
     		if(USE_TRANSFER && USE_SELECTION_TRANSFER && child != null) { //if selection transfer is enabled, use a modified UCB1
     			sourceNodeTo = child.getNearestSourceNode(this.sMap);
     			currScore = ucb1WithTransfer(child, sourceNodeFrom, sourceNodeTo, moveCombo, turnIndex);
+    		} else if(SELECTION_HEURISTIC && this.scRegression != null) {
+    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex);
     		} else { //if selection transfer is disabled, just use regular UCB1
     			currScore = ucb1Basic(child, turnIndex);
     		}
@@ -1514,6 +1738,25 @@ public class TestGamer extends StateMachineGamer
     	double combinedValue = SELECTION_TRANSFER_RATIO*transferValue + (1-SELECTION_TRANSFER_RATIO)*regularValue;
 //    	System.out.println("### " + targetMoveSet + " " + regularValue + " " + transferValue + " " + regularExplore + " " + combinedValue);
     	return combinedValue + regularExplore;
+    }
+
+
+    private double ucb1HeuristicGuided (MCTNode currNode, Move m, int turnIndex) {
+    	double regularValue, regularExplore, finalValue;
+    	if(currNode == null || currNode.getNumVisits() == 0) {
+    		regularValue = 0;
+    		regularExplore = NEW_EXPLORE_VALUE;
+    		finalValue = regularValue;
+    	} else {
+    		regularValue = (currNode.getTotalReward().get(turnIndex) / MAX_REWARD_VALUE) / currNode.getNumVisits();
+    		regularExplore = EXPLORE_PARAM*Math.sqrt(Math.log(currNode.getTotalParentVisits())/currNode.getNumVisits());
+
+    		double heuristicWeight = HEURISTIC_INITIAL * Math.pow(HEURISTIC_DECAY, currNode.getNumVisits()-1);
+    		double regularWeight = 1 - heuristicWeight;
+    		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false);
+    		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
+    	}
+    	return finalValue + regularExplore;
     }
 
 
@@ -1594,6 +1837,44 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    private MCTNode rolloutEarlyEval (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
+    	MCTNode currNode = startNode;
+    	int depth = 0;
+    	this.numRollouts ++;
+    	List<Move> selectedMove = null;
+
+    	while(!currNode.isTerminal() && depth < ROLLOUT_EVAL_DEPTH) {
+    		currNode.expandChildren();
+			selectedMove = randomMove(currNode);
+
+    		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
+			for(int i=0;i<convertedMove.size();i++) {
+				movesTaken.get(i).add(convertedMove.get(i));
+			}
+    		currNode = currNode.getExpandedChild(selectedMove, this.existingNodes, SAVE_MCT_TO_FILE);
+    		statesOnPath.add(currNode.getStateSet());
+    		pathInOrder.add(currNode);
+    		depth++;
+    	}
+    	if(!currNode.isTerminal() && depth >= ROLLOUT_EVAL_DEPTH) {
+    		List<Double> heurRewards = new ArrayList<Double>();
+    		currNode.expandChildren();
+    		for(int i=0;i<this.allRoles.size();i++) {
+    			double heur = this.calcHeuristicValue(selectedMove.get(i), currNode, i, false);
+    			heurRewards.add(heur);
+    		}
+    		System.out.println("H: " + heurRewards);
+    		currNode.setHeuristicGoals(heurRewards);
+    	}
+
+    	if(this.numRollouts % 10 == 0) {
+    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    	}
+
+    	return currNode;
+    }
+
+
     //Perform a rollout. If Rollout Transfer (R) is enabled, then influence rollouts as described in the "Knowledge Transfer" subsection
     //movesTaken will be altered by the addition of moves taken during the rollout
     private MCTNode rollout (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
@@ -1666,6 +1947,19 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    private void earlyBackprop(List<Double> reward, ArrayList<MCTNode> pathInOrder) {
+    	MCTNode currNode = null;
+
+    	for(int i=0;i<pathInOrder.size();i++) {
+    		int index = pathInOrder.size() - 1 - i;
+    		currNode = pathInOrder.get(index);
+    		for(int j=0;j<reward.size();j++) {
+    			currNode.setTotalReward(j, currNode.getTotalReward().get(j) + Math.pow(DISCOUNT_FACTOR, i)*reward.get(j));
+    		}
+    		currNode.setNumVisits(currNode.getNumVisits() + 1);
+    	}
+    }
+
     // Do MCTS backpropagation
     private void backprop (List<Double> reward, ArrayList<MCTNode> pathInOrder, MCTNode terminalNode) {
     	MCTNode currNode = null;
@@ -1710,7 +2004,7 @@ public class TestGamer extends StateMachineGamer
 
     		if(this.recordMobility && !terminalStateSeen) {
     			if(!currNode.isTerminal() && currNode.getDepth() > 0) {
-    				int mobValue = currNode.getChildren().size() - currNode.getNumSiblings();
+    				int mobValue = currNode.getMobility2P();
     				mobData.totalMobPerPlayer.set(turnIndex, mobData.totalMobPerPlayer.get(turnIndex) + mobValue);
     				mobData.numEntriesPerPlayer.set(turnIndex, mobData.numEntriesPerPlayer.get(turnIndex) + 1);
     				if(mobValue > this.maxMobility.get(turnIndex)) {
@@ -2101,6 +2395,9 @@ public class TestGamer extends StateMachineGamer
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
+		this.scRegression = null;
+		this.mobRegression = null;
+		this.nearestWinRegression = null;
 
 		System.out.println("All cleaned up.");
     }
@@ -2138,6 +2435,9 @@ public class TestGamer extends StateMachineGamer
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
+		this.scRegression = null;
+		this.mobRegression = null;
+		this.nearestWinRegression = null;
     }
 
 
@@ -2281,4 +2581,95 @@ public class TestGamer extends StateMachineGamer
     	public float maxValue = 0;
     	public float minValue = 0;
     }
+
+    public static class SCRegressionContainer {
+    	public Map<SymbolCountKey, SimpleRegression> regMap = new HashMap<SymbolCountKey, SimpleRegression>();
+    	public Map<SymbolCountKey, Integer> occMap = new HashMap<SymbolCountKey, Integer>();
+    	public double avgR = 0;
+//    	public double totalR = 0;
+    	public int totalOcc = 0;
+
+    	public PredictionPackage combinedPredict(Map<SymbolCountKey, Integer> symCounts) {
+    		double result = 0;
+    		double totalWeight = 0;
+    		double maxR = 0;
+    		for(SymbolCountKey key : symCounts.keySet()) {
+    			if(this.regMap.containsKey(key)) {
+    				double currPredict = clampRewardVal(this.regMap.get(key).predict(symCounts.get(key)));
+    				double currR = Math.abs(this.regMap.get(key).getR());
+    				if(currR > maxR) {
+    					maxR = currR;
+    				}
+    				result += currPredict * currR;
+    				totalWeight += currR;
+    			}
+    		}
+    		result = result / totalWeight;
+    		return new PredictionPackage(result, maxR);
+    	}
+
+		public String toNameString(StateMapping mapping) {
+    		String result = "";
+    		for(SymbolCountKey key : regMap.keySet()) {
+    			result += key.toNameString(mapping) + ": R=" + regMap.get(key).getR() + " ";
+    		}
+    		return result;
+    	}
+    }
+
+    public static class PredictionPackage {
+    	public double prediction;
+    	public double maxR;
+
+    	PredictionPackage(double prediction, double maxR) {
+    		this.prediction = prediction;
+    		this.maxR = maxR;
+    	}
+    }
+
+//    public static class GenHistoryRegressionContainer {
+//    	public Map<Integer, SimpleRegression> regMap = new HashMap<Integer, SimpleRegression>();
+////    	public Map<Integer, Integer> occMap = new HashMap<Integer, Integer>();
+//    	public double avgR = 0;
+////    	public int totalOcc = 0;
+//
+//    	public PredictionPackage combinedPredict(int moveID) {
+//    		double result = 0;
+//    		double maxR = 0;
+//    		double prediction = 0;
+//    		if(this.regMap.containsKey(moveID)) {
+//    			prediction = this.regMap.get(moveID).predict(1);
+//				if(prediction > MAX_REWARD_VALUE) {
+//					prediction = MAX_REWARD_VALUE;
+//				} else if(prediction < MIN_REWARD_VALUE) {
+//					prediction = MIN_REWARD_VALUE;
+//				}
+//				maxR = this.regMap.get(moveID).getR();
+//    		}
+//    		return new PredictionPackage(result, maxR);
+//    	}
+//    }
+//
+//    public static class SpecHistoryRegressionContainer {
+//    	public Map<List<Integer>, SimpleRegression> regMap = new HashMap<List<Integer>, SimpleRegression>();
+////    	public Map<List<Integer>, Integer> occMap = new HashMap<List<Integer>, Integer>();
+//    	public double avgR = 0;
+//    	public int totalOcc = 0;
+//
+//    	public PredictionPackage combinedPredict(List<Integer> moveList) {
+//    		double result = 0;
+//    		double maxR = 0;
+//    		double prediction = 0;
+//    		if(this.regMap.containsKey(moveList)) {
+//    			prediction = this.regMap.get(moveList).predict(1);
+//				if(prediction > MAX_REWARD_VALUE) {
+//					prediction = MAX_REWARD_VALUE;
+//				} else if(prediction < MIN_REWARD_VALUE) {
+//					prediction = MIN_REWARD_VALUE;
+//				}
+//				maxR = this.regMap.get(moveList).getR();
+//    		}
+//    		return new PredictionPackage(result, maxR);
+//    	}
+//    }
 }
