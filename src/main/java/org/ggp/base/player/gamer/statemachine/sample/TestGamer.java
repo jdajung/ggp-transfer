@@ -103,6 +103,7 @@ public class TestGamer extends StateMachineGamer
 	public boolean SAVE_MCT_TO_FILE;
 	public String MCT_READ_DIR;
 	public String EXPERIMENT_SAVE_DIR;
+	public boolean INITIAL_HEUR_RECORD = ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL;
 
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
@@ -520,31 +521,40 @@ public class TestGamer extends StateMachineGamer
     		origRoot = root;
     	}
 
-    	recordSymOccs = true;
-    	recordMobility = true;
-    	recordNearestWin = true;
-    	recordHistory = true;
+    	if(INITIAL_HEUR_RECORD || SAVE_MCT_TO_FILE) {
+	    	recordSymOccs = true;
+	    	recordMobility = true;
+	    	recordNearestWin = true;
+	    	recordHistory = true;
+    	} else {
+    		recordSymOccs = false;
+	    	recordMobility = false;
+	    	recordNearestWin = true;
+	    	recordHistory = false;
+    	}
 
     	startTime = System.currentTimeMillis();
 
     	//Start MCTS
     	buildTreeForTime(timeout);
 
-    	System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-    	long heurTimeStart = System.currentTimeMillis();
-    	this.prepHeuristics();
-    	long heurTimeEnd = System.currentTimeMillis();
-    	this.recordSymOccs = false;
-    	this.recordMobility = false;
-    	this.recordHistory = false;
-    	System.out.println(heurTimeEnd - heurTimeStart);
-    	System.out.println("SC: " + this.scRegression.get(0).toNameString(this.sMap));
-    	System.out.println("Gen History:");
-    	for(int moveID : this.genHistoryData.get(0).keySet()) {
-    		HistoryData data = this.genHistoryData.get(0).get(moveID);
-    		System.out.println(this.sMap.getTargetName(moveID) + ": " + ((double)data.totalReward) / data.numOccs);
+    	if(INITIAL_HEUR_RECORD) {
+	    	System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+	    	long heurTimeStart = System.currentTimeMillis();
+	    	this.prepHeuristics();
+	    	long heurTimeEnd = System.currentTimeMillis();
+	    	this.recordSymOccs = false;
+	    	this.recordMobility = false;
+	    	this.recordHistory = false;
+	    	System.out.println(heurTimeEnd - heurTimeStart);
+	    	System.out.println("SC: " + this.scRegression.get(0).toNameString(this.sMap));
+	    	System.out.println("Gen History:");
+	    	for(int moveID : this.genHistoryData.get(0).keySet()) {
+	    		HistoryData data = this.genHistoryData.get(0).get(moveID);
+	    		System.out.println(this.sMap.getTargetName(moveID) + ": " + ((double)data.totalReward) / data.numOccs);
+	    	}
+	    	System.out.println();
     	}
-    	System.out.println();
     }
 
 
