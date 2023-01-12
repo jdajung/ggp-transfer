@@ -103,7 +103,7 @@ public class TestGamer extends StateMachineGamer
 	public boolean SAVE_MCT_TO_FILE;
 	public String MCT_READ_DIR;
 	public String EXPERIMENT_SAVE_DIR;
-	public boolean INITIAL_HEUR_RECORD = ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL;
+	public boolean INITIAL_HEUR_RECORD;
 
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
@@ -199,6 +199,7 @@ public class TestGamer extends StateMachineGamer
 		this.EXPERIMENT_SAVE_DIR = (String)(params.get(9));
 
 		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
+		this.INITIAL_HEUR_RECORD = ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL;
 //		System.out.println(params);
 	}
 
@@ -652,10 +653,12 @@ public class TestGamer extends StateMachineGamer
     		}
     		currNode.expandChildren();
     		if(!currNode.isTerminal()) {
-    			if(!EARLY_ROLLOUT_EVAL || this.scRegression == null) {
-    				currNode = rollout(currNode, statesOnPath, pathInOrder, movesTaken);
-    			} else {
+    			if(EARLY_ROLLOUT_EVAL && this.scRegression != null) {
     				currNode = rolloutEarlyEval(currNode, statesOnPath, pathInOrder, movesTaken);
+    			} else if(ROLLOUT_ORDERING && this.scRegression != null) { //Note: early rollout evaluation and rollout ordering cannot currently be used together
+    				currNode = rolloutHeuristicOrdered(currNode, statesOnPath, pathInOrder, movesTaken);
+    			} else {
+    				currNode = rollout(currNode, statesOnPath, pathInOrder, movesTaken);
     			}
     		}
 
@@ -847,11 +850,32 @@ public class TestGamer extends StateMachineGamer
 
 
     public static SCRegressionContainer doSCRegression(List<FullRolloutData> scData, Set<SymbolCountKey> usefulKeys, int roleIndex) {
-    	SCRegressionContainer container = new SCRegressionContainer();
+    	return doSCRegression(scData, usefulKeys, roleIndex, new SCRegressionContainer());
+    }
+
+    //if usefulKeys = null, then assume all keys are useful
+    public static SCRegressionContainer doSCRegression(List<FullRolloutData> scData, Set<SymbolCountKey> usefulKeys, int roleIndex, SCRegressionContainer container) {
+//    	SCRegressionContainer container = new SCRegressionContainer();
     	for(FullRolloutData data : scData) {
     		int reward = data.finalReward.get(roleIndex);
-    		for(SymbolCountKey key : usefulKeys) {
-    			if(data.symCountData.containsKey(key)) {
+    		if (usefulKeys != null) {
+	    		for(SymbolCountKey key : usefulKeys) {
+	    			if(data.symCountData.containsKey(key)) {
+	    				SymbolCountGameData curr = data.symCountData.get(key);
+	    				if(curr.numSteps > 0) {
+		    				if(!container.regMap.containsKey(key)) {
+		    					container.regMap.put(key, new SimpleRegression());
+		    					container.occMap.put(key, 0);
+		    				}
+		    				double x = ((double)curr.totalOcc) / curr.numSteps;
+		    				double y = reward;
+		    				container.regMap.get(key).addData(x, y);
+		    				container.occMap.put(key, container.occMap.get(key) + 1); //weighting based on number of rollouts it appeared in
+	    				}
+	    			}
+	    		}
+    		} else {
+    			for(SymbolCountKey key : data.symCountData.keySet()) {
     				SymbolCountGameData curr = data.symCountData.get(key);
     				if(curr.numSteps > 0) {
 	    				if(!container.regMap.containsKey(key)) {
@@ -863,7 +887,7 @@ public class TestGamer extends StateMachineGamer
 	    				container.regMap.get(key).addData(x, y);
 	    				container.occMap.put(key, container.occMap.get(key) + 1); //weighting based on number of rollouts it appeared in
     				}
-    			}
+	    		}
     		}
     	}
 
@@ -883,7 +907,11 @@ public class TestGamer extends StateMachineGamer
 
 
     public static SimpleRegression doMobilityRegression(List<MobilityData> mobData, int roleIndex) {
-    	SimpleRegression reg = new SimpleRegression();
+    	return doMobilityRegression(mobData, roleIndex, new SimpleRegression());
+    }
+
+    public static SimpleRegression doMobilityRegression(List<MobilityData> mobData, int roleIndex, SimpleRegression reg) {
+//    	SimpleRegression reg = new SimpleRegression();
     	for(MobilityData currData : mobData) {
     		if(currData.numEntriesPerPlayer.get(roleIndex) > 0) {
     			double x = currData.totalMobPerPlayer.get(roleIndex) / currData.numEntriesPerPlayer.get(roleIndex);
@@ -896,9 +924,31 @@ public class TestGamer extends StateMachineGamer
 
 
     public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex) {
+    	return doNearestWinRegression(root, roleIndex, new SimpleRegression());
+    }
+
+//    public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex, SimpleRegression reg) {
+//    	List<MCTNode> allNodes = queueNoPriority(-1, root);
+//    	return doNearestWinRegression(allNodes, roleIndex, reg);
+//    }
+
+    public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex, SimpleRegression reg) {
     	List<MCTNode> allNodes = queueNoPriority(-1, root);
-    	SimpleRegression reg = new SimpleRegression();
+//    	SimpleRegression reg = new SimpleRegression();
     	for(MCTNode currNode : allNodes) {
+    		double x = currNode.getNearestWin().get(roleIndex);
+    		if(x >= 0) {
+    			double y = currNode.getTotalReward().get(roleIndex) / currNode.getNumVisits();
+    			reg.addData(x, y);
+    		}
+    	}
+    	return reg;
+    }
+
+    public static SimpleRegression doNearestWinRegression(List<ReducedMCTNode> allNodes, int roleIndex, SimpleRegression reg) {
+//    	List<MCTNode> allNodes = queueNoPriority(-1, root);
+//    	SimpleRegression reg = new SimpleRegression();
+    	for(ReducedMCTNode currNode : allNodes) {
     		double x = currNode.getNearestWin().get(roleIndex);
     		if(x >= 0) {
     			double y = currNode.getTotalReward().get(roleIndex) / currNode.getNumVisits();
@@ -1862,55 +1912,53 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-//    private MCTNode rolloutHeuristicOrdered (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
-//    	MCTNode currNode = startNode;
-//    	int depth = 0;
-//    	this.numRollouts ++;
-////    	if(this.numRollouts % 10 == 0) {
-////    		System.out.println(this.numRollouts + " rollouts");
-////    	}
-//    	while(!currNode.isTerminal() && depth < ROLLOUT_MAX_DEPTH) {
-//    		currNode.expandChildren();
-//    		List<Move> selectedMove;
-//			double bestScore = 0.0;
-//			List<List<Integer>> bestNearestMove = null;
-//
-//			for(List<Move> currMove : currNode.getChildren().keySet()) { //find a transfer value for each possible move
-//				int turnIndex = currNode.getWhoseTurnAssume2P();
-//				if(turnIndex < 0) {
-//					turnIndex = 0;
-//				}
-//				MCTNode currChild = currNode.getExpandedChild(moveCombo, existingNodes, trackExisting)
-//				double heurScore = this.calcHeuristicValue(selectedMove.get(i), currNode, i, false);
-//				if(currTransfer > bestScore) {
-//					bestScore = currTransfer;
-//					selectedMove = currMove;
-//				}
-//			}
-//
-//			if(selectedMove == null) {
-//				selectedMove = randomMove(currNode);
-//			}
-//
-//    		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
-//			for(int i=0;i<convertedMove.size();i++) {
-//				movesTaken.get(i).add(convertedMove.get(i));
-//			}
-//    		currNode = currNode.getExpandedChild(selectedMove, this.existingNodes, SAVE_MCT_TO_FILE);
-//    		statesOnPath.add(currNode.getStateSet());
-//    		pathInOrder.add(currNode);
-//    		depth++;
-//    	}
-//    	if(depth == ROLLOUT_MAX_DEPTH) {
-//    		System.out.println("ERROR in rollout: max depth exceeded.");
-//    	}
-//
-//    	if(this.numRollouts % 10 == 0) {
-//    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
-//    	}
-//
-//    	return currNode;
-//    }
+    private MCTNode rolloutHeuristicOrdered (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
+    	MCTNode currNode = startNode;
+    	int depth = 0;
+    	this.numRollouts ++;
+
+    	while(!currNode.isTerminal() && depth < ROLLOUT_MAX_DEPTH) {
+    		currNode.expandChildren();
+    		List<Move> selectedMove = null;
+			double bestScore = 0.0;
+			List<List<Integer>> bestNearestMove = null;
+
+			for(List<Move> currMove : currNode.getChildren().keySet()) { //find a transfer value for each possible move
+				int turnIndex = currNode.getWhoseTurnAssume2P();
+				if(turnIndex < 0) {
+					turnIndex = 0;
+				}
+				MCTNode currChild = currNode.getExpandedChild(currMove, this.existingNodes, SAVE_MCT_TO_FILE);
+				double heurScore = this.calcHeuristicValue(currMove.get(turnIndex), currChild, turnIndex, false);
+				if(heurScore > bestScore) {
+					bestScore = heurScore;
+					selectedMove = currMove;
+				}
+			}
+
+			if(selectedMove == null) {
+				selectedMove = randomMove(currNode);
+			}
+
+    		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
+			for(int i=0;i<convertedMove.size();i++) {
+				movesTaken.get(i).add(convertedMove.get(i));
+			}
+    		currNode = currNode.getExpandedChild(selectedMove, this.existingNodes, SAVE_MCT_TO_FILE);
+    		statesOnPath.add(currNode.getStateSet());
+    		pathInOrder.add(currNode);
+    		depth++;
+    	}
+    	if(depth == ROLLOUT_MAX_DEPTH) {
+    		System.out.println("ERROR in rollout: max depth exceeded.");
+    	}
+
+    	if(this.numRollouts % 10 == 0) {
+    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    	}
+
+    	return currNode;
+    }
 
 
     private MCTNode rolloutEarlyEval (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
@@ -2569,22 +2617,43 @@ public class TestGamer extends StateMachineGamer
 			outStr += posn + ")";
 			return outStr;
 		}
+
+		@Override
+		public String toString() {
+			String outStr = "(" + parentSym + " " + mainSym + " " + posn + ")";
+			return outStr;
+		}
     }
 
     public static class SymbolCountGameData {
     	public int totalOcc = 0;
     	public int numSteps = 0;
+
+    	@Override
+		public String toString() {
+    		return totalOcc + " " + numSteps;
+    	}
     }
 
     public static class FullRolloutData {
     	public Map<SymbolCountKey, SymbolCountGameData> symCountData = new HashMap<SymbolCountKey, SymbolCountGameData>();
     	public List<Integer> finalReward = Arrays.asList(-1, -1);
+
+    	@Override
+		public String toString() {
+    		return finalReward.toString() + ", " + symCountData.toString();
+    	}
     }
 
     public static class MobilityData {
     	public List<Float> totalMobPerPlayer = new ArrayList<Float>();
     	public List<Integer> numEntriesPerPlayer = new ArrayList<Integer>();
     	public List<Integer> finalReward = Arrays.asList(-1, -1);
+
+    	@Override
+		public String toString() {
+    		return totalMobPerPlayer + ", " + numEntriesPerPlayer + ", " + finalReward;
+    	}
     }
 
     public static class HistoryData {
@@ -2593,6 +2662,11 @@ public class TestGamer extends StateMachineGamer
     	public int numLosses = 0;
     	public int numOther = 0;
     	public int numOccs = 0;
+
+    	@Override
+		public String toString() {
+    		return totalReward + " " + numWins + " " + numLosses + " " + numOther + " " + numOccs;
+    	}
     }
 
     public static class SymbolCountHeurData {
