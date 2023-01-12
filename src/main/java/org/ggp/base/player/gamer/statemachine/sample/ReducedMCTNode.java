@@ -14,8 +14,12 @@ public class ReducedMCTNode {
 	private int numParentVisits;
 	private int numSiblings;
 	private int numVisitsOld;
+	private int depth;
+	private List<Integer> nearestWin;
+	private List<Integer> nearestLoss;
 	private HashMap<List<List<Integer>>, Pair<List<Double>, Integer>> childData;
 
+	//deprecated
 	public ReducedMCTNode(int id, StateNode stateTree, List<Double> totalReward, int numVisits, int numParentVisits, int numSiblings) {
 		this.id = id;
 		this.stateTree = stateTree;
@@ -43,6 +47,14 @@ public class ReducedMCTNode {
 	public ReducedMCTNode(int id, Set<List<Integer>> stateSet, List<Double> totalReward, int numVisits, int numParentVisits, int numSiblings, int numVisitsOld) {
 		this(id, stateSet, totalReward, numVisits, numParentVisits, numSiblings);
 		this.numVisitsOld = numVisitsOld;
+	}
+
+	public ReducedMCTNode(int id, Set<List<Integer>> stateSet, List<Double> totalReward, int numVisits, int numParentVisits, int numSiblings, int numVisitsOld,
+			int depth, List<Integer> nearestWin, List<Integer> nearestLoss) {
+		this(id, stateSet, totalReward, numVisits, numParentVisits, numSiblings, numVisitsOld);
+		this.depth = depth;
+		this.nearestWin = nearestWin;
+		this.nearestLoss = nearestLoss;
 	}
 
 	public ReducedMCTNode(MCTNode fullNode) {
@@ -113,6 +125,18 @@ public class ReducedMCTNode {
 
 	public int getNumSiblings() {
 		return this.numSiblings;
+	}
+
+	public int getDepth() {
+		return this.depth;
+	}
+
+	public List<Integer> getNearestWin() {
+		return this.nearestWin;
+	}
+
+	public List<Integer> getNearestLoss() {
+		return this.nearestLoss;
 	}
 
 	public HashMap<List<List<Integer>>, Pair<List<Double>, Integer>> getChildData() {

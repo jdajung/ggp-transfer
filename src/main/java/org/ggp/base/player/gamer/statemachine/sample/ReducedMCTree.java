@@ -3,16 +3,25 @@ package org.ggp.base.player.gamer.statemachine.sample;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.StringTokenizer;
+
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.FullRolloutData;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.HistoryData;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.MobilityData;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SymbolCountGameData;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SymbolCountKey;
 
 public class ReducedMCTree {
 
@@ -26,6 +35,17 @@ public class ReducedMCTree {
 	private List<Double> bestSpecificRatio;
 	private List<Double> bestGeneralRatio;
 
+	public int numPlayers;
+	public Map<SymbolCountKey, Integer> maxSCVals;
+	public Map<SymbolCountKey, Integer> minSCVals;
+	public List<FullRolloutData> symCountData;
+//	public Map<SymbolCountKey, List<SymbolCountHeurData>> compiledSCData;
+	public List<MobilityData> mobilityData;
+//	public List<MobilityHeurData> compiledMobData;
+	public List<Map<Integer, HistoryData>> shortKeyHistoryData;
+	public List<Map<List<Integer>, HistoryData>> historyData;
+	public List<Map<Integer, HistoryData>> genHistoryData;
+
 	public ReducedMCTree() {
 		this.states = new ArrayList<ReducedMCTNode>();
 		this.stateCompLookUp = new HashMap<Integer,List<Integer>>();
@@ -36,6 +56,17 @@ public class ReducedMCTree {
 		this.totalVisits = new ArrayList<Long>();
 		this.bestSpecificRatio = new ArrayList<Double>();
 		this.bestGeneralRatio = new ArrayList<Double>();
+
+		this.numPlayers = 0;
+		this.maxSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.minSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.symCountData = new LinkedList<FullRolloutData>();
+//		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
+		this.mobilityData = new LinkedList<MobilityData>();
+//		this.compiledMobData = new ArrayList<MobilityHeurData>();
+		this.shortKeyHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 	}
 
 	public ReducedMCTree(ArrayList<ReducedMCTNode> states, List<HashMap<List<Integer>, Pair<Double, Long>>> specificMoveTotalData, List<HashMap<Integer, Pair<Double, Long>>> generalMoveTotalData) {
@@ -48,6 +79,17 @@ public class ReducedMCTree {
 		this.totalVisits = new ArrayList<Long>();
 		this.bestSpecificRatio = new ArrayList<Double>();
 		this.bestGeneralRatio = new ArrayList<Double>();
+
+		this.numPlayers = 0;
+		this.maxSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.minSCVals = new HashMap<SymbolCountKey, Integer>();
+		this.symCountData = new LinkedList<FullRolloutData>();
+//		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
+		this.mobilityData = new LinkedList<MobilityData>();
+//		this.compiledMobData = new ArrayList<MobilityHeurData>();
+		this.shortKeyHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 	}
 
 
@@ -101,14 +143,26 @@ public class ReducedMCTree {
             int lineNumber = 0;
             int numPlayers = 0;
             ArrayList<HashMap<Integer,List<Integer>>> moveLookUp = new ArrayList<HashMap<Integer,List<Integer>>>(); //for each role, keep a HashMap of move IDs to their full list of components (IDs do NOT correspond to rule graph IDs)
+            int[] lineNumberBound = new int[10];
+            lineNumberBound[0] = 1; //unique line(s) at top of file
 
             while (s.hasNext()) {
                 String line = s.nextLine();
                 if(line.length() > 0) {
                 	StringTokenizer tok = new StringTokenizer(line);
 
-                	if(lineNumber <= 0) { //unique line(s) at top of file
+                	if(lineNumber < lineNumberBound[0]) { //unique line(s) at top of file
                 		numPlayers = Integer.parseInt(tok.nextToken());
+                		this.numPlayers = numPlayers;
+                		lineNumberBound[1] = lineNumberBound[0] + numPlayers; //one line for each player giving general move data
+                        lineNumberBound[2] = lineNumberBound[1] + numPlayers; //one line for each player giving specific move data
+                        lineNumberBound[3] = lineNumberBound[2] + 1; //one line for symbol count max and min values
+                        lineNumberBound[4] = lineNumberBound[3] + 1; //one line for symbol count heuristic data
+                        lineNumberBound[5] = lineNumberBound[4] + 1; //one line for mobility heuristic data
+                        lineNumberBound[6] = lineNumberBound[5] + numPlayers; // one line for each player assigning an ID to each unique move
+                        lineNumberBound[7] = lineNumberBound[6] + numPlayers; //one line per player for general history heuristic data
+                        lineNumberBound[8] = lineNumberBound[7] + numPlayers; //one line per player for specific history heuristic data
+                        lineNumberBound[9] = lineNumberBound[8] + 1; //one line assigning an ID to each unique state component
                 		for(int i=0;i<numPlayers;i++) {
                 			this.specificMoveTotalData.add(new HashMap<List<Integer>, Pair<Double, Long>>());
                 			this.generalMoveTotalData.add(new HashMap<Integer, Pair<Double, Long>>());
@@ -116,8 +170,8 @@ public class ReducedMCTree {
                 			this.totalVisits.add(0l);
                 		}
 
-                	} else if(lineNumber <= numPlayers) { //one line for each player giving general move data
-                		int roleIndex = lineNumber - 1;
+                	} else if(lineNumber < lineNumberBound[1]) { //one line for each player giving general move data
+                		int roleIndex = lineNumber - lineNumberBound[0];
                 		while(tok.hasMoreTokens()) {
                 			double reward = Double.parseDouble(tok.nextToken());
                 			long visits = Long.parseLong(tok.nextToken());
@@ -128,8 +182,8 @@ public class ReducedMCTree {
                 			this.generalMoveTotalData.get(roleIndex).put(id, new Pair<Double,Long>(reward, visits));
                 		}
 
-                	} else if(lineNumber <= 2*numPlayers) { //one line for each player giving specific move data
-                		int roleIndex = lineNumber - numPlayers - 1;
+                	} else if(lineNumber < lineNumberBound[2]) { //one line for each player giving specific move data
+                		int roleIndex = lineNumber - lineNumberBound[1];
                 		while(tok.hasMoreTokens()) {
                 			double reward = Double.parseDouble(tok.nextToken());
                 			long visits = Long.parseLong(tok.nextToken());
@@ -146,9 +200,104 @@ public class ReducedMCTree {
                 			this.specificMoveTotalData.get(roleIndex).put(specIDs, new Pair<Double,Long>(reward, visits));
                 		}
 
-                	} else if(lineNumber <= 3*numPlayers) { // one line for each player assigning an ID to each unique move
+                	} else if(lineNumber < lineNumberBound[3]) { //one line for symbol count max and min values
+                		while(tok.hasMoreTokens()) {
+                			int mainSym = Integer.parseInt(tok.nextToken());
+                			int parentSym = Integer.parseInt(tok.nextToken());
+                			int posn = Integer.parseInt(tok.nextToken());
+                			SymbolCountKey currKey = new SymbolCountKey(mainSym, parentSym, posn);
+            				int maxVal = Integer.parseInt(tok.nextToken());
+            				int minVal = Integer.parseInt(tok.nextToken());
+                			this.maxSCVals.put(currKey, maxVal);
+                			this.minSCVals.put(currKey, minVal);
+                			tok.nextToken(); //Throw away *
+                		}
+
+                	} else if(lineNumber < lineNumberBound[4]) { //one line for symbol count heuristic data
+                		while(tok.hasMoreTokens()) {
+                			FullRolloutData currData = new FullRolloutData();
+                			for(int i=0;i<numPlayers;i++) {
+                				int currReward = Integer.parseInt(tok.nextToken());
+                				if(currData.finalReward.size() < i+1) {
+                					currData.finalReward.add(currReward);
+                				}
+                				currData.finalReward.set(i, currReward);
+                			}
+                			if(tok.hasMoreTokens()) {
+                				String currDelim = "";
+                				while(!currDelim.equals("*")) {
+                					int mainSym = Integer.parseInt(tok.nextToken());
+                        			int parentSym = Integer.parseInt(tok.nextToken());
+                        			int posn = Integer.parseInt(tok.nextToken());
+                        			int totalOcc = Integer.parseInt(tok.nextToken());
+                        			int numSteps = Integer.parseInt(tok.nextToken());
+                        			currDelim = tok.nextToken();
+                        			SymbolCountKey key = new SymbolCountKey(mainSym, parentSym, posn);
+                        			SymbolCountGameData value = new SymbolCountGameData();
+                        			value.totalOcc = totalOcc;
+                        			value.numSteps = numSteps;
+                        			currData.symCountData.put(key, value);
+                				}
+                			}
+                			this.symCountData.add(currData);
+
+//                			int mainSym = Integer.parseInt(tok.nextToken());
+//                			int parentSym = Integer.parseInt(tok.nextToken());
+//                			int posn = Integer.parseInt(tok.nextToken());
+//                			SymbolCountKey currKey = new SymbolCountKey(mainSym, parentSym, posn);
+//                			List<SymbolCountHeurData> allPlayerData = new ArrayList<SymbolCountHeurData>();
+//                			for(int i=0;i<numPlayers;i++) {
+//                				SymbolCountHeurData currData = new SymbolCountHeurData();
+//                				currData.totalWinValue = Float.parseFloat(tok.nextToken());
+//                				currData.totalLossValue = Float.parseFloat(tok.nextToken());
+//                				currData.totalOtherValue = Float.parseFloat(tok.nextToken());
+//                				currData.numWins = Integer.parseInt(tok.nextToken());
+//                				currData.numLosses = Integer.parseInt(tok.nextToken());
+//                				currData.numOther = Integer.parseInt(tok.nextToken());
+//                				currData.maxValue = Float.parseFloat(tok.nextToken());
+//                				tok.nextToken(); //throw away # or *
+//                				allPlayerData.add(currData);
+//                			}
+//                			this.compiledSCData.put(currKey, allPlayerData);
+                		}
+
+                	} else if(lineNumber < lineNumberBound[5]) { //one line for mobility heuristic data
+                		while(tok.hasMoreTokens()) {
+                			MobilityData currData = new MobilityData();
+                			for(int i=0;i<numPlayers;i++) {
+                				int currReward = Integer.parseInt(tok.nextToken());
+                				float currMob = Float.parseFloat(tok.nextToken());
+                				int currEntries = Integer.parseInt(tok.nextToken());
+                				if(currData.finalReward.size() < i+1) {
+                					currData.finalReward.add(currReward);
+                				}
+                				currData.finalReward.set(i, currReward);
+                				currData.totalMobPerPlayer.add(currMob);
+                				currData.numEntriesPerPlayer.add(currEntries);
+                			}
+                			this.mobilityData.add(currData);
+                			tok.nextToken(); //Throw away *
+
+//                			for(int i=0;i<numPlayers;i++) {
+//                				MobilityHeurData currData = new MobilityHeurData();
+//                				currData.totalWinValue = Float.parseFloat(tok.nextToken());
+//                				currData.totalLossValue = Float.parseFloat(tok.nextToken());
+//                				currData.totalOtherValue = Float.parseFloat(tok.nextToken());
+//                				currData.numWins = Integer.parseInt(tok.nextToken());
+//                				currData.numLosses = Integer.parseInt(tok.nextToken());
+//                				currData.numOther = Integer.parseInt(tok.nextToken());
+//                				currData.maxValue = Float.parseFloat(tok.nextToken());
+//                				currData.minValue = Float.parseFloat(tok.nextToken());
+//                				if(tok.hasMoreTokens()) {
+//                					tok.nextToken(); //throw away #
+//                				}
+//                				this.compiledMobData.add(currData);
+//                			}
+                		}
+
+                	} else if(lineNumber < lineNumberBound[6]) { // one line for each player assigning an ID to each unique move
                 		moveLookUp.add(new HashMap<Integer,List<Integer>>());
-                		int currRole = lineNumber - 2*numPlayers - 1;
+                		int currRole = lineNumber - lineNumberBound[5];
                 		while(tok.hasMoreTokens()) {
                 			String currTok = tok.nextToken();
                 			int moveID = -1;
@@ -182,7 +331,48 @@ public class ReducedMCTree {
                 			moveLookUp.get(currRole).put(moveID, moveList);
                 		}
 
-                	} else if(lineNumber <= 3*numPlayers + 1) { //one line assigning an ID to each unique state component
+                	} else if(lineNumber < lineNumberBound[7]) { //one line per player for general history heuristic data
+//                		int roleIndex = lineNumber - lineNumberBound[6];
+                		Map<Integer, HistoryData> playerData = new HashMap<Integer, HistoryData>();
+                		while(tok.hasMoreTokens()) {
+                			HistoryData currData = new HistoryData();
+                			int genID = Integer.parseInt(tok.nextToken());
+                			currData.totalReward = Integer.parseInt(tok.nextToken());
+                			currData.numWins = Integer.parseInt(tok.nextToken());
+                			currData.numLosses = Integer.parseInt(tok.nextToken());
+                			currData.numOther = Integer.parseInt(tok.nextToken());
+                			currData.numOccs = Integer.parseInt(tok.nextToken());
+                			tok.nextToken(); //Throw away *
+                			playerData.put(genID, currData);
+                		}
+                		this.genHistoryData.add(playerData);
+
+                	} else if(lineNumber < lineNumberBound[8]) { //one line per player for specific history heuristic data
+                		int roleIndex = lineNumber - lineNumberBound[7];
+                		Map<Integer, HistoryData> playerData = new HashMap<Integer, HistoryData>();
+                		while(tok.hasMoreTokens()) {
+                			HistoryData currData = new HistoryData();
+                			int shortKey = Integer.parseInt(tok.nextToken());
+                			currData.totalReward = Integer.parseInt(tok.nextToken());
+                			currData.numWins = Integer.parseInt(tok.nextToken());
+                			currData.numLosses = Integer.parseInt(tok.nextToken());
+                			currData.numOther = Integer.parseInt(tok.nextToken());
+                			currData.numOccs = Integer.parseInt(tok.nextToken());
+                			tok.nextToken(); //Throw away *
+                			playerData.put(shortKey, currData);
+                		}
+                		this.shortKeyHistoryData.add(playerData);
+                		Map<List<Integer>, HistoryData> playerDataExpanded = new HashMap<List<Integer>, HistoryData>();
+                		for(int shortKey : playerData.keySet()) {
+                			if(!moveLookUp.get(roleIndex).containsKey(shortKey)) {
+                				System.out.println("ERROR in loadStatesFromFile: Encountered short move key with no associated full List<Integer>");
+                			} else {
+                				playerDataExpanded.put(moveLookUp.get(roleIndex).get(shortKey), playerData.get(shortKey));
+                			}
+                		}
+                		this.historyData.add(playerDataExpanded);
+
+                	} else if(lineNumber < lineNumberBound[9]) { //one line assigning an ID to each unique state component
                 		int currCompNum = 0;
                 		List<Integer> currComp = new ArrayList<Integer>();
                 		while(tok.hasMoreTokens()) {
@@ -210,6 +400,13 @@ public class ReducedMCTree {
 		                int numParentVisits = Integer.parseInt(tok.nextToken());
 		                int numSiblings = Integer.parseInt(tok.nextToken());
 		                int numVisitsOld = Integer.parseInt(tok.nextToken());
+		                int depth = Integer.parseInt(tok.nextToken());
+		                List<Integer> nearestWin = new ArrayList<Integer>();
+		                List<Integer> nearestLoss = new ArrayList<Integer>();
+		                for(int i=0;i<numPlayers;i++) { //read in nearest win and loss for each player
+		                	nearestWin.add(Integer.parseInt(tok.nextToken()));
+		                	nearestLoss.add(Integer.parseInt(tok.nextToken()));
+		                }
 
 		                //this block assumes states are represented as lists of components
 		                Set<List<Integer>> newStateList = new HashSet<List<Integer>>();
@@ -227,7 +424,8 @@ public class ReducedMCTree {
 
 //		                System.out.println("*** " + currTok);
 //		                StateNode newStateTree = genStateTreeFromString(currTok); // <---- If you want state trees to work, you need to change this line to something that parses the new state format
-		                ReducedMCTNode newState = new ReducedMCTNode(id, newStateList, totalReward, numVisits, numParentVisits, numSiblings, numVisitsOld);
+		                ReducedMCTNode newState = new ReducedMCTNode(id, newStateList, totalReward, numVisits, numParentVisits, numSiblings, numVisitsOld,
+		                		depth, nearestWin, nearestLoss);
 
 		                while(tok.hasMoreTokens()) { //read moves after state
 		                	List<Integer> currMoveIDs = new ArrayList<Integer>();
@@ -294,7 +492,7 @@ public class ReducedMCTree {
                 }
             }
 
-        } catch (Exception e) {
+        } catch (FileNotFoundException e) {
             System.out.println("ERROR loading states from file");
             System.out.println(e);
         } finally {
