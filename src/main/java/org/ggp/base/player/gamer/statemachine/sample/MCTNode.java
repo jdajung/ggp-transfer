@@ -87,12 +87,14 @@ public class MCTNode {
 		this.numVisitsOld = -1;
 		this.nearestWin = new ArrayList<Integer>();
 		this.nearestLoss = new ArrayList<Integer>();
+		this.heuristicGoals = new ArrayList<Double>();
 		List<Role> allRoles = this.machine.getRoles();
 		this.totalReward = new ArrayList<Double>();
 		for(Role r : allRoles) {
 			this.totalReward.add(0.0);
 			this.nearestWin.add(-1);
 			this.nearestLoss.add(-1);
+			this.heuristicGoals.add(-1.0);
 		}
 		this.goals = null;
 		this.transferTerm = TRANSFER_TERM_SENTINEL;

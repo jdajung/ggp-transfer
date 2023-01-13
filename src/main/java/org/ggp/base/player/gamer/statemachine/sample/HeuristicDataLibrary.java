@@ -19,14 +19,14 @@ import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SymbolCountKey;
 public class HeuristicDataLibrary {
 
 	public static String SAVE_FILE_NAME = "heuristic_data.txt";
-	public static String MCT_READ_DIR = "MCTs/checkers";
-	public static String HEUR_SAVE_DIR = "MCTs/checkers";
+	public static String MCT_READ_DIR = "MCTs/reversi";
+	public static String HEUR_SAVE_DIR = "MCTs/reversi";
 	public static int MAX_FILES = 1000;  //Number of MCT files to combine
 	public static Random rand = new Random(3769460674928934938L);
 
 
 	public static void main(String[] args) {
-		LinkedList<ReducedMCTree> trees = new LinkedList<ReducedMCTree>();
+//		LinkedList<ReducedMCTree> trees = new LinkedList<ReducedMCTree>();
 
     	File folder = new File(MCT_READ_DIR);
     	File[] listOfFiles = folder.listFiles();
@@ -43,17 +43,76 @@ public class HeuristicDataLibrary {
     	    }
     	}
 
+    	List<SCRegressionContainer> scRegression = new ArrayList<SCRegressionContainer>();
+    	List<SimpleRegression> mobRegression = new ArrayList<SimpleRegression>();
+    	List<SimpleRegression> nearestWinRegression = new ArrayList<SimpleRegression>();
+    	List<Map<List<Integer>, HistoryData>> historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+    	List<Map<Integer, HistoryData>> genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+    	int numPlayers = 0;
+
+    	int fileNum = 0;
     	for(String name : fileNames) {
-    		if(trees.size() < MAX_FILES) {
-	    		ReducedMCTree newTree = new ReducedMCTree();
-	    		newTree.loadStatesFromFile(MCT_READ_DIR + "/" + name);
-	    		trees.add(newTree);
+    		if(fileNum < MAX_FILES) {
+	    		ReducedMCTree currTree = new ReducedMCTree();
+	    		System.out.println("Reading file # " + fileNum);
+	    		currTree.loadStatesFromFile(MCT_READ_DIR + "/" + name);
+//	    		trees.add(currTree);
+
+	    		if(fileNum == 0) {
+		    		numPlayers = currTree.numPlayers;
+		        	for(int i=0; i<numPlayers; i++) {
+		        		scRegression.add(new SCRegressionContainer());
+		        		mobRegression.add(new SimpleRegression());
+		        		nearestWinRegression.add(new SimpleRegression());
+		        		historyData.add(new HashMap<List<Integer>, HistoryData>());
+		        		genHistoryData.add(new HashMap<Integer, HistoryData>());
+		        	}
+	    		}
+
+	        	for(int i=0;i<numPlayers;i++) {
+	    			TestGamer.doSCRegression(currTree.symCountData, null, i, scRegression.get(i));
+	    			TestGamer.doMobilityRegression(currTree.mobilityData, i, mobRegression.get(i));
+	    			TestGamer.doNearestWinRegression(currTree.getStates(), i, nearestWinRegression.get(i));
+	    			Map<Integer, HistoryData> currGenHistory = currTree.genHistoryData.get(i);
+	    			for(int key : currGenHistory.keySet()) {
+	    				if(!genHistoryData.get(i).containsKey(key)) {
+	    					genHistoryData.get(i).put(key, new HistoryData());
+	    				}
+	    				HistoryData histFrom = currGenHistory.get(key);
+	    				HistoryData histTo = genHistoryData.get(i).get(key);
+	    				histTo.totalReward += histFrom.totalReward;
+	    				histTo.numWins += histFrom.numWins;
+	    				histTo.numLosses += histFrom.numLosses;
+	    				histTo.numOther += histFrom.numOther;
+	    				histTo.numOccs += histFrom.numOccs;
+	    			}
+	    			Map<List<Integer>, HistoryData> currSpecHistory = currTree.historyData.get(i);
+	    			for(List<Integer> key : currSpecHistory.keySet()) {
+	    				if(!historyData.get(i).containsKey(key)) {
+	    					historyData.get(i).put(key, new HistoryData());
+	    				}
+	    				HistoryData histFrom = currSpecHistory.get(key);
+	    				HistoryData histTo = historyData.get(i).get(key);
+	    				histTo.totalReward += histFrom.totalReward;
+	    				histTo.numWins += histFrom.numWins;
+	    				histTo.numLosses += histFrom.numLosses;
+	    				histTo.numOther += histFrom.numOther;
+	    				histTo.numOccs += histFrom.numOccs;
+	    			}
+	    		}
+	    		System.out.println("***************** " + fileNum + " *****************");
+	    		System.out.println(scRegression.get(0).avgR + " " + scRegression.get(0).totalOcc);
+	    		System.out.println(mobRegression.get(0).getR() + " " + mobRegression.get(0).getN());
+	    		System.out.println(nearestWinRegression.get(0).getR() + " " + nearestWinRegression.get(0).getN());
+	    		System.out.println(genHistoryData.get(0));
+	    		System.out.println(historyData.get(0));
+	    		fileNum++;
     		} else {
     			break;
     		}
     	}
 
-    	System.out.println("Found " + trees.size() + " MCT files.");
+    	System.out.println("Found " + (fileNum+1) + " MCT files.");
 
 
 //    	int treeNum = 1;
@@ -68,64 +127,6 @@ public class HeuristicDataLibrary {
 //    		System.out.println(currTree.genHistoryData);
 //    		treeNum++;
 //    	}
-
-
-    	int numPlayers = trees.get(0).numPlayers;
-
-    	List<SCRegressionContainer> scRegression = new ArrayList<SCRegressionContainer>();
-    	List<SimpleRegression> mobRegression = new ArrayList<SimpleRegression>();
-    	List<SimpleRegression> nearestWinRegression = new ArrayList<SimpleRegression>();
-    	List<Map<List<Integer>, HistoryData>> historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
-    	List<Map<Integer, HistoryData>> genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
-    	for(int i=0; i<numPlayers; i++) {
-    		scRegression.add(new SCRegressionContainer());
-    		mobRegression.add(new SimpleRegression());
-    		nearestWinRegression.add(new SimpleRegression());
-    		historyData.add(new HashMap<List<Integer>, HistoryData>());
-    		genHistoryData.add(new HashMap<Integer, HistoryData>());
-    	}
-
-    	int treeNum = 1;
-    	for(ReducedMCTree currTree : trees) {
-    		for(int i=0;i<numPlayers;i++) {
-    			TestGamer.doSCRegression(currTree.symCountData, null, i, scRegression.get(i));
-    			TestGamer.doMobilityRegression(currTree.mobilityData, i, mobRegression.get(i));
-    			TestGamer.doNearestWinRegression(currTree.getStates(), i, nearestWinRegression.get(i));
-    			Map<Integer, HistoryData> currGenHistory = currTree.genHistoryData.get(i);
-    			for(int key : currGenHistory.keySet()) {
-    				if(!genHistoryData.get(i).containsKey(key)) {
-    					genHistoryData.get(i).put(key, new HistoryData());
-    				}
-    				HistoryData histFrom = currGenHistory.get(key);
-    				HistoryData histTo = genHistoryData.get(i).get(key);
-    				histTo.totalReward += histFrom.totalReward;
-    				histTo.numWins += histFrom.numWins;
-    				histTo.numLosses += histFrom.numLosses;
-    				histTo.numOther += histFrom.numOther;
-    				histTo.numOccs += histFrom.numOccs;
-    			}
-    			Map<List<Integer>, HistoryData> currSpecHistory = currTree.historyData.get(i);
-    			for(List<Integer> key : currSpecHistory.keySet()) {
-    				if(!historyData.get(i).containsKey(key)) {
-    					historyData.get(i).put(key, new HistoryData());
-    				}
-    				HistoryData histFrom = currSpecHistory.get(key);
-    				HistoryData histTo = historyData.get(i).get(key);
-    				histTo.totalReward += histFrom.totalReward;
-    				histTo.numWins += histFrom.numWins;
-    				histTo.numLosses += histFrom.numLosses;
-    				histTo.numOther += histFrom.numOther;
-    				histTo.numOccs += histFrom.numOccs;
-    			}
-    		}
-    		System.out.println("***************** " + treeNum + " *****************");
-    		System.out.println(scRegression.get(0).avgR + " " + scRegression.get(0).totalOcc);
-    		System.out.println(mobRegression.get(0).getR() + " " + mobRegression.get(0).getN());
-    		System.out.println(nearestWinRegression.get(0).getR() + " " + nearestWinRegression.get(0).getN());
-    		System.out.println(genHistoryData.get(0));
-    		System.out.println(historyData.get(0));
-    		treeNum++;
-    	}
 
 
     	//Prepare data for writing to file

@@ -117,7 +117,7 @@ public class TestGamer extends StateMachineGamer
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
 	public static final long TIME_THRESHOLD = 5000;
-	public static final double EXPLORE_PARAM = 0.2;//Math.sqrt(2);
+	public static final double EXPLORE_PARAM = 0.4;//Math.sqrt(2);
 	public static final double NEW_EXPLORE_VALUE = 1000000;
 	public static final int ROLLOUT_MAX_DEPTH = 220;
 	public static final double MAX_REWARD_VALUE = 100.0;
@@ -127,7 +127,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double CERTAINTY_STEEPNESS = 1.0;
 	public static final double STATE_CERTAINTY_OFFSET = 0.8;
 	public static final double STATE_CERTAINTY_STEEPNESS = 20;
-	public static final String PLAY_SELECT_MODE = "reward";  //one of "visits", or "reward"
+	public static final String PLAY_SELECT_MODE = "visits";  //one of "visits", or "reward"
 	public String RULE_GRAPH_FILE = "";
 	public String MCT_SAVE_DIR = "MCTs/checkers";
 	public static final String EXP_SUMMARY_FILE = "summary.txt";
@@ -668,7 +668,7 @@ public class TestGamer extends StateMachineGamer
     		}
 
     		while(currNode.isExpanded() && !currNode.isTerminal()) {
-    			int turnIndex = currNode.getWhoseTurn();
+    			int turnIndex = currNode.getWhoseTurnAssume2P();
     			if(turnIndex == -1 || turnIndex == -2) { //If nobody has an option, or there are simultaneous turns, just assume our own perspective (NOTE: will need to be changed to better handle simultaneous turns)
     				turnIndex = this.roleIndex;
     			} //turnIndex cannot be -3 because state is not terminal
@@ -781,11 +781,12 @@ public class TestGamer extends StateMachineGamer
 
     	double mobVal = 0;
     	double mobWeight = 0;
+    	int mobDif = -node.getMobility2P();
     	if(LOAD_HEUR_FILE) {
-    		mobVal = clampRewardVal(this.loadedMobRegression.get(roleIndex).predict(node.getMobility2P()));
+    		mobVal = clampRewardVal(this.loadedMobRegression.get(roleIndex).predict(mobDif));
 	    	mobWeight = Math.abs(this.loadedMobRegression.get(roleIndex).getR());
     	} else {
-	    	mobVal = clampRewardVal(this.mobRegression.get(roleIndex).predict(node.getMobility2P()));
+	    	mobVal = clampRewardVal(this.mobRegression.get(roleIndex).predict(mobDif));
 	    	mobWeight = Math.abs(this.mobRegression.get(roleIndex).getR());
     	}
 
@@ -833,13 +834,14 @@ public class TestGamer extends StateMachineGamer
 	    	System.out.println("*** Heuristic Calculation ***");
 	    	System.out.println(result);
 	    	System.out.println("SC: " + scVal + " " + scWeight);
-	    	System.out.println("Mob: " + mobVal + " " + mobWeight + " " + node.getMobility2P());
+	    	System.out.println("Mob: " + mobVal + " " + mobWeight + " " + mobDif);
 	    	System.out.println("NW: " + nearestWinVal + " " + nearestWinWeight + " " + node.getNearestWin().get(roleIndex));
 	    	System.out.println("Gen Hist: " + genHistVal + " " + genHistWeight);
 	    	System.out.println("Spec Hist: " + specHistVal + " " + specHistWeight);
 	    	System.out.println("");
     	}
 
+    	node.getHeuristicGoals().set(roleIndex, result);
     	return result;
     }
 //
@@ -1756,7 +1758,8 @@ public class TestGamer extends StateMachineGamer
 	    		currScore = currMoveHeuristic*PLAY_TRANSFER_RATIO + currScore*(1-PLAY_TRANSFER_RATIO);
     		}
 
-    		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getTotalReward().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
+
+    		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getHeuristicGoals().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
 //    		System.out.println(ucb1Basic(currNode, this.roleIndex));
 //    		System.out.println("# " + currNode.getNumSiblings());
 
