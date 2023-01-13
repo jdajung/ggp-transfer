@@ -263,6 +263,15 @@ public class StateMapping {
 	}
 
 
+	public int mapSourceIDToTarget(int sourceID) {
+		if(this.edit.getRevMapping().containsKey(sourceID)) {
+			return this.edit.getRevMapping().get(sourceID);
+		} else {
+			return -1;
+		}
+	}
+
+
 	//produce a state corresponding to the given target state in source game
 	//Note: unlike it's tree counterpart, this method is non-destructive
 	public Set<List<Integer>> mapTargetStateSetToSource(Set<List<Integer>> targetState) {
