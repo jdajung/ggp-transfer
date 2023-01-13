@@ -2018,7 +2018,7 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	if(this.numRollouts % 10 == 0) {
-    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    		System.out.println(NW_ENABLED + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
     	}
 
     	return currNode;
