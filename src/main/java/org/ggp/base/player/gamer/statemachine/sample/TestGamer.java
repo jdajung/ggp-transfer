@@ -111,6 +111,7 @@ public class TestGamer extends StateMachineGamer
 	public boolean SAVE_RULE_GRAPH_TO_FILE;
 	public boolean SAVE_MCT_TO_FILE;
 	public String MCT_READ_DIR;
+	public boolean SAVE_EXPERIMENT;
 	public String EXPERIMENT_SAVE_DIR;
 	public boolean INITIAL_HEUR_RECORD;
 
@@ -146,6 +147,7 @@ public class TestGamer extends StateMachineGamer
 	public static final int LOSE_THRESH = 20;
 	public static final int MIN_VISITS_FOR_SAVE = 4;
 	public static final int ROLLOUT_EVAL_DEPTH = 10;
+	public static final int ROLLOUT_GUIDE_DEPTH = 6;
 
 	public TestGamer() {
 		super();
@@ -211,7 +213,8 @@ public class TestGamer extends StateMachineGamer
 		this.SAVE_RULE_GRAPH_TO_FILE = (Boolean)(params.get(6));
 		this.SAVE_MCT_TO_FILE = (Boolean)(params.get(7));
 		this.MCT_READ_DIR = (String)(params.get(8));
-		this.EXPERIMENT_SAVE_DIR = (String)(params.get(9));
+		this.SAVE_EXPERIMENT = (Boolean)(params.get(9));
+		this.EXPERIMENT_SAVE_DIR = (String)(params.get(10));
 
 		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
 		this.INITIAL_HEUR_RECORD = (ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && !LOAD_HEUR_FILE;
@@ -625,7 +628,7 @@ public class TestGamer extends StateMachineGamer
             root.setParents(null);
     	}
 
-    	if(EXPERIMENT_SAVE_DIR != null && !EXPERIMENT_SAVE_DIR.equals("")) {
+    	if(SAVE_EXPERIMENT) {
     		this.stateHistory.addLast(root.getStateSet());
     	}
 
@@ -781,6 +784,7 @@ public class TestGamer extends StateMachineGamer
 
     	double mobVal = 0;
     	double mobWeight = 0;
+
     	int mobDif = -node.getMobility2P();
     	if(LOAD_HEUR_FILE) {
     		mobVal = clampRewardVal(this.loadedMobRegression.get(roleIndex).predict(mobDif));
@@ -1887,14 +1891,13 @@ public class TestGamer extends StateMachineGamer
     	} else {
     		regularValue = (currNode.getTotalReward().get(turnIndex) / MAX_REWARD_VALUE) / currNode.getNumVisits();
     		regularExplore = EXPLORE_PARAM*Math.sqrt(Math.log(currNode.getTotalParentVisits())/currNode.getNumVisits());
-
     		double heuristicWeight = HEURISTIC_INITIAL * Math.pow(HEURISTIC_DECAY, currNode.getNumVisits()-1);
     		double regularWeight = 1 - heuristicWeight;
     		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false) / MAX_REWARD_VALUE;
     		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
+    	}
 
 //    		System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight + " " + regularExplore);
-    	}
     	return finalValue + regularExplore;
     }
 
@@ -1987,19 +1990,21 @@ public class TestGamer extends StateMachineGamer
 			double bestScore = 0.0;
 			List<List<Integer>> bestNearestMove = null;
 
-			for(List<Move> currMove : currNode.getChildren().keySet()) { //find a transfer value for each possible move
-				int turnIndex = currNode.getWhoseTurnAssume2P();
-				if(turnIndex < 0) {
-					turnIndex = 0;
-				}
-				MCTNode currChild = currNode.getExpandedChild(currMove, this.existingNodes, SAVE_MCT_TO_FILE);
-				double heurScore = this.calcHeuristicValue(currMove.get(turnIndex), currChild, turnIndex, false);
-				if(heurScore > bestScore) {
-					bestScore = heurScore;
-					selectedMove = currMove;
+			if(depth < ROLLOUT_GUIDE_DEPTH) {
+				for(List<Move> currMove : currNode.getChildren().keySet()) {
+					int turnIndex = currNode.getWhoseTurnAssume2P();
+					if(turnIndex < 0) {
+						turnIndex = 0;
+					}
+					MCTNode currChild = currNode.getExpandedChild(currMove, this.existingNodes, SAVE_MCT_TO_FILE);
+
+					double heurScore = this.calcHeuristicValue(currMove.get(turnIndex), currChild, turnIndex, false);
+					if(heurScore > bestScore) {
+						bestScore = heurScore;
+						selectedMove = currMove;
+					}
 				}
 			}
-
 			if(selectedMove == null) {
 				selectedMove = randomMove(currNode);
 			}
@@ -2051,7 +2056,7 @@ public class TestGamer extends StateMachineGamer
     			double heur = this.calcHeuristicValue(selectedMove.get(i), currNode, i, false);
     			heurRewards.add(heur);
     		}
-    		System.out.println("H: " + heurRewards);
+//    		System.out.println("H: " + heurRewards);
     		currNode.setHeuristicGoals(heurRewards);
     	}
 
@@ -2343,36 +2348,11 @@ public class TestGamer extends StateMachineGamer
     //For each game played, saves one file that specifies every state that was played, and adds a line to summary.txt
     //summary.txt contains one line for each game. The first number of each line is the amount of reward received by the agent that did the saving. The second number is the number of turns played. The remaining numbers indicate the final game state.
     public void saveExperimentToFile() {
-
     	String historyFileName = "";
     	File folder = new File(EXPERIMENT_SAVE_DIR);
     	File[] listOfFiles = folder.listFiles();
     	List<String> fileNames = new LinkedList<String>();
     	int biggestIndex = 0;
-
-    	//figure out last state and reward values
-    	List<GdlTerm> lastMoveTerms = this.getMatch().getMostRecentMoves();
-    	if (lastMoveTerms != null) {
-    		List<Move> lastMove = new ArrayList<Move>();
-    		for(GdlTerm term : lastMoveTerms) {
-    			lastMove.add(new Move(term));
-    		}
-    		root = root.getChildren().get(lastMove);
-    	}
-
-    	List<Integer> goals = null;
-		goals = root.getGoals();
-
-		List<Double> goalDoubles = new ArrayList<Double>();
-		for(Integer i : goals) { //convert goal values to double type
-			goalDoubles.add(i.doubleValue());
-		}
-		double reward = goalDoubles.get(this.roleIndex);
-		Set<List<Integer>> finalState = root.getStateSet();
-		System.out.println("Finished experiment with reward: " + reward);
-		System.out.println("final state: " + finalState + "\n");
-		String summaryLine = reward + " " + this.numTurns + " " + stateToPrintString(finalState) + "\n";
-
 
     	//determine file name for new history file
     	for (File file : listOfFiles) {
@@ -2404,39 +2384,73 @@ public class TestGamer extends StateMachineGamer
     	}
     	historyFileName += newIndex + ".txt";
 
-    	//write history file
-    	String outStr = "";
-    	File file = new File(EXPERIMENT_SAVE_DIR + "/" + historyFileName);
-        FileWriter fr = null;
-        BufferedWriter br = null;
-        for(Set<List<Integer>> state : this.stateHistory) {
-        	outStr += stateToPrintString(state) + "\n";
-        }
-        try{
-            fr = new FileWriter(file);
-            br = new BufferedWriter(fr, RuleGraphRecord.BUFFER_SIZE);
-            br.write(summaryLine);
-            br.write(outStr);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                br.close();
-                fr.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+
+    	if(SAVE_EXPERIMENT) {
+
+	    	//figure out last state and reward values
+	    	List<GdlTerm> lastMoveTerms = this.getMatch().getMostRecentMoves();
+	    	if (lastMoveTerms != null) {
+	    		List<Move> lastMove = new ArrayList<Move>();
+	    		for(GdlTerm term : lastMoveTerms) {
+	    			lastMove.add(new Move(term));
+	    		}
+	    		root = root.getChildren().get(lastMove);
+	    	}
+
+	    	List<Integer> goals = null;
+			goals = root.getGoals();
+
+			List<Double> goalDoubles = new ArrayList<Double>();
+			for(Integer i : goals) { //convert goal values to double type
+				goalDoubles.add(i.doubleValue());
+			}
+			double reward = goalDoubles.get(this.roleIndex);
+			Set<List<Integer>> finalState = root.getStateSet();
+			System.out.println("Finished experiment with reward: " + reward);
+			System.out.println("final state: " + finalState + "\n");
+			String summaryLine = reward + " " + this.numTurns + " " + stateToPrintString(finalState) + "\n";
+
+	    	//write history file
+	    	String outStr = "";
+	    	File file = new File(EXPERIMENT_SAVE_DIR + "/" + historyFileName);
+	        FileWriter fr = null;
+	        BufferedWriter br = null;
+	        for(Set<List<Integer>> state : this.stateHistory) {
+	        	outStr += stateToPrintString(state) + "\n";
+	        }
+	        try{
+	            fr = new FileWriter(file);
+	            br = new BufferedWriter(fr, RuleGraphRecord.BUFFER_SIZE);
+	            br.write(summaryLine);
+	            br.write(outStr);
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        } finally {
+	            try {
+	                br.close();
+	                fr.close();
+	            } catch (IOException e) {
+	                e.printStackTrace();
+	            }
+	        }
 
 
-        //append to summary file
-        try {
-            FileWriter fw = new FileWriter(EXPERIMENT_SAVE_DIR + "/" + EXP_SUMMARY_FILE,true); //the true will append the new data
-            fw.write(summaryLine);
-            fw.close();
-        }
-        catch(IOException e) {
-            System.out.println("IOException: " + e.getMessage());
+	        //append to summary file
+	        try {
+	            FileWriter fw = new FileWriter(EXPERIMENT_SAVE_DIR + "/" + EXP_SUMMARY_FILE,true); //the true will append the new data
+	            fw.write(summaryLine);
+	            fw.close();
+	        }
+	        catch(IOException e) {
+	            System.out.println("IOException: " + e.getMessage());
+	        }
+    	}
+
+
+        //if heuristics were generated during initialization, save them
+        if(INITIAL_HEUR_RECORD) {
+        	String savePath = EXPERIMENT_SAVE_DIR + "/heur_" + this.getRole() + "_" + historyFileName;
+        	HeuristicDataLibrary.writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, savePath);
         }
     }
 
@@ -2547,7 +2561,7 @@ public class TestGamer extends StateMachineGamer
         	int nodeCount = saveMctToFile(MCT_SAVE_DIR + "/" + this.getNextMCTSaveName(), NUM_SAVED_MCT_NODES);
         	System.out.println("Saved MCT with " + nodeCount + " nodes.");
         }
-    	if(EXPERIMENT_SAVE_DIR != null && !EXPERIMENT_SAVE_DIR.equals("")) {
+    	if(SAVE_EXPERIMENT || INITIAL_HEUR_RECORD) {
     		System.out.println("Saving experiment data...");
     		saveExperimentToFile();
     		System.out.println("Finished saving experiment data.");
