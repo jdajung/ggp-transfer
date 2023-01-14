@@ -128,9 +128,15 @@ public class HeuristicDataLibrary {
 //    		treeNum++;
 //    	}
 
+    	writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, HEUR_SAVE_DIR + "/" + SAVE_FILE_NAME);
+	}
 
-    	//Prepare data for writing to file
-    	String headerStr = "" + numPlayers;
+
+
+	public static void writeHeuristicFile(List<SCRegressionContainer> scRegression, List<SimpleRegression> mobRegression, List<SimpleRegression> nearestWinRegression,
+			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, String savePath) {
+		int numPlayers = scRegression.size();
+		String headerStr = "" + numPlayers;
     	String[] scStr = new String[numPlayers];
     	String[] mobStr = new String[numPlayers];
     	String[] nwStr = new String[numPlayers];
@@ -169,7 +175,7 @@ public class HeuristicDataLibrary {
 
 
 		//Write data to file
-		File file = new File(HEUR_SAVE_DIR + "/" + SAVE_FILE_NAME);
+		File file = new File(savePath);
         FileWriter fr = null;
         BufferedWriter br = null;
         try{
