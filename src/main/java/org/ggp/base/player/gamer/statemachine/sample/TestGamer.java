@@ -556,13 +556,13 @@ public class TestGamer extends StateMachineGamer
 		        		double winPercent = (genData.numWins / (double)genData.numOccs);
 		        		System.out.println(this.sMap.getTargetName(genMove) + ": " + value + " " + winPercent);
 		        	}
-		        	System.out.println("*********** Specific History Data for " + i + " ***********");
-		        	for(List<Integer> specMove : historyData.get(i).keySet()) {
-		        		HistoryData specData = historyData.get(i).get(specMove);
-		        		double value = (specData.totalReward / (double)specData.numOccs);
-		        		double winPercent = (specData.numWins / (double)specData.numOccs);
-		        		System.out.println(this.sMap.getTargetName(specMove) + ": " + specMove + " " + value + " " + winPercent);
-		        	}
+//		        	System.out.println("*********** Specific History Data for " + i + " ***********");
+//		        	for(List<Integer> specMove : historyData.get(i).keySet()) {
+//		        		HistoryData specData = historyData.get(i).get(specMove);
+//		        		double value = (specData.totalReward / (double)specData.numOccs);
+//		        		double winPercent = (specData.numWins / (double)specData.numOccs);
+//		        		System.out.println(this.sMap.getTargetName(specMove) + ": " + specMove + " " + value + " " + winPercent);
+//		        	}
 	    		}
 	    	}
 
@@ -826,6 +826,10 @@ public class TestGamer extends StateMachineGamer
     	} else {
 	    	mobVal = clampRewardVal(this.mobRegression.get(roleIndex).predict(mobDif));
 	    	mobWeight = Math.abs(this.mobRegression.get(roleIndex).getR());
+    	}
+    	if(Double.isNaN(mobVal)) {
+    		mobVal = 0.0;
+    		mobWeight = 0.0;
     	}
 
     	double nearestWinVal = 0;

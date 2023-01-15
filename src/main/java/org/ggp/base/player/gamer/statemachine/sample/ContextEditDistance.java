@@ -55,7 +55,7 @@ public class ContextEditDistance {
 	private HashSet<Integer> undirectedEdges;
 	private float distVal;
 
-	public static final String DEFAULT_MAPPING_ALG = "full_matrix"; //one of: "full_matrix", "two_lines"
+	public static final String DEFAULT_MAPPING_ALG = "two_lines"; //one of: "full_matrix", "two_lines"
 
 	public static final float BIG_NUM = 1000000;
 	public static final float FLOAT_TOLERANCE = 0.0000001f;
