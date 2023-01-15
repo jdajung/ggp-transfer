@@ -14,8 +14,8 @@ public class MCTMerger {
 	public static int MAX_NODES = 10000;  //Number of nodes archived
 	public static String PRIORITY_TYPE = "visits_weighted";  //options are: "visits", "visits_weighted", "non_monoscore", "random"
 	public static String SAVE_FILE_NAME = "MCT_combined.txt";
-	public static String MCT_READ_DIR = "MCTs/checkers";
-	public static String MCT_SAVE_DIR = "MCTs/checkers";
+	public static String MCT_READ_DIR = "MCTs/connect_four";
+	public static String MCT_SAVE_DIR = "MCTs/connect_four";
 	public static int MAX_FILES = 64;  //Number of MCT files to combine
 	public static Random rand = new Random(3769460674928934938L);
 
@@ -23,7 +23,7 @@ public class MCTMerger {
 	// This method is described by the "Archiving Information" subsection of the "Method" section of the paper
 	// It combines MCT nodes saved during different game instances and saves those that are have the highest priority
 	public static void main(String[] args) {
-		LinkedList<ReducedMCTree> trees = new LinkedList<ReducedMCTree>();
+//		LinkedList<ReducedMCTree> trees = new LinkedList<ReducedMCTree>();
 
     	File folder = new File(MCT_READ_DIR);
     	File[] listOfFiles = folder.listFiles();
@@ -40,66 +40,68 @@ public class MCTMerger {
     	    }
     	}
 
-    	for(String name : fileNames) {
-    		if(trees.size() < MAX_FILES) {
-	    		ReducedMCTree newTree = new ReducedMCTree();
-	    		newTree.loadStatesFromFile(MCT_READ_DIR + "/" + name);
-	    		trees.add(newTree);
-    		} else {
-    			break;
-    		}
-    	}
-
-    	System.out.println("Found " + trees.size() + " MCT files.");
-
     	TreeSet<MCTMerger.PriorityItem<ReducedMCTNode>> sorted = new TreeSet<MCTMerger.PriorityItem<ReducedMCTNode>>();
     	List<HashMap<List<Integer>, Pair<Double, Long>>> allSpec = new ArrayList<HashMap<List<Integer>, Pair<Double, Long>>>();
     	List<HashMap<Integer, Pair<Double, Long>>> allGen = new ArrayList<HashMap<Integer, Pair<Double, Long>>>();
     	HashMap<Set<List<Integer>>, ReducedMCTNode> allNodes = new HashMap<Set<List<Integer>>, ReducedMCTNode>();
 
-    	for(ReducedMCTree currTree : trees) {
-    		totalNodes += currTree.getStates().size();
-    		List<HashMap<List<Integer>, Pair<Double, Long>>> currSpec = currTree.getSpecificMoveTotalData();
-    		List<HashMap<Integer, Pair<Double, Long>>> currGen = currTree.getGeneralMoveTotalData();
-    		ArrayList<ReducedMCTNode> currNodes = currTree.getStates();
+    	int numTrees = 0;
+    	for(String name : fileNames) {
+    		if(numTrees < MAX_FILES) {
+	    		ReducedMCTree currTree = new ReducedMCTree();
+	    		System.out.println("Reading file # " + numTrees);
+	    		currTree.loadStatesFromFile(MCT_READ_DIR + "/" + name);
+//	    		trees.add(currTree);
 
-    		for(int i=0;i<currSpec.size();i++) {
-    			if(allSpec.size()<=i) {
-    				allSpec.add(new HashMap<List<Integer>, Pair<Double, Long>>());
-    				allGen.add(new HashMap<Integer, Pair<Double, Long>>());
-    			}
+	    		totalNodes += currTree.getStates().size();
+	    		List<HashMap<List<Integer>, Pair<Double, Long>>> currSpec = currTree.getSpecificMoveTotalData();
+	    		List<HashMap<Integer, Pair<Double, Long>>> currGen = currTree.getGeneralMoveTotalData();
+	    		ArrayList<ReducedMCTNode> currNodes = currTree.getStates();
 
-    			for(List<Integer> move : currSpec.get(i).keySet()) {
-    				if(!allSpec.get(i).containsKey(move)) {
-    					allSpec.get(i).put(move, currSpec.get(i).get(move));
-    				} else {
-    					Pair<Double, Long> oldPair = allSpec.get(i).get(move);
-    					Pair<Double, Long> currPair = currSpec.get(i).get(move);
-    					Pair<Double, Long> newPair = new Pair<Double, Long>(oldPair.getKey() + currPair.getKey(), oldPair.getValue() + currPair.getValue());
-    					allSpec.get(i).put(move, newPair);
-    				}
-    			}
+	    		for(int i=0;i<currSpec.size();i++) {
+	    			if(allSpec.size()<=i) {
+	    				allSpec.add(new HashMap<List<Integer>, Pair<Double, Long>>());
+	    				allGen.add(new HashMap<Integer, Pair<Double, Long>>());
+	    			}
 
-    			for(int move : currGen.get(i).keySet()) {
-    				if(!allGen.get(i).containsKey(move)) {
-    					allGen.get(i).put(move, currGen.get(i).get(move));
-    				} else {
-    					Pair<Double, Long> oldPair = allGen.get(i).get(move);
-    					Pair<Double, Long> currPair = currGen.get(i).get(move);
-    					Pair<Double, Long> newPair = new Pair<Double, Long>(oldPair.getKey() + currPair.getKey(), oldPair.getValue() + currPair.getValue());
-    					allGen.get(i).put(move, newPair);
-    				}
-    			}
-    		}
+	    			for(List<Integer> move : currSpec.get(i).keySet()) {
+	    				if(!allSpec.get(i).containsKey(move)) {
+	    					allSpec.get(i).put(move, currSpec.get(i).get(move));
+	    				} else {
+	    					Pair<Double, Long> oldPair = allSpec.get(i).get(move);
+	    					Pair<Double, Long> currPair = currSpec.get(i).get(move);
+	    					Pair<Double, Long> newPair = new Pair<Double, Long>(oldPair.getKey() + currPair.getKey(), oldPair.getValue() + currPair.getValue());
+	    					allSpec.get(i).put(move, newPair);
+	    				}
+	    			}
 
-			for(ReducedMCTNode node : currNodes) {
-				if(!allNodes.containsKey(node.getStateSet())) {
-					allNodes.put(node.getStateSet(), node);
-				} else {
-					allNodes.get(node.getStateSet()).merge(node);
+	    			for(int move : currGen.get(i).keySet()) {
+	    				if(!allGen.get(i).containsKey(move)) {
+	    					allGen.get(i).put(move, currGen.get(i).get(move));
+	    				} else {
+	    					Pair<Double, Long> oldPair = allGen.get(i).get(move);
+	    					Pair<Double, Long> currPair = currGen.get(i).get(move);
+	    					Pair<Double, Long> newPair = new Pair<Double, Long>(oldPair.getKey() + currPair.getKey(), oldPair.getValue() + currPair.getValue());
+	    					allGen.get(i).put(move, newPair);
+	    				}
+	    			}
+	    		}
+
+				for(ReducedMCTNode node : currNodes) {
+					if(!allNodes.containsKey(node.getStateSet())) {
+						allNodes.put(node.getStateSet(), node);
+					} else {
+						allNodes.get(node.getStateSet()).merge(node);
+					}
 				}
-			}
-		}
+
+	    		numTrees++;
+    		} else {
+    			break;
+    		}
+    	}
+
+    	System.out.println("Found " + numTrees + " MCT files.");
 
 		int maxVisits = 0;
 		for(ReducedMCTNode node : allNodes.values()) {

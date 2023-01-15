@@ -114,6 +114,7 @@ public class TestGamer extends StateMachineGamer
 	public boolean SAVE_EXPERIMENT;
 	public String EXPERIMENT_SAVE_DIR;
 	public boolean INITIAL_HEUR_RECORD;
+	public boolean USE_ALT_HIST_HEUR;
 
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
@@ -218,6 +219,7 @@ public class TestGamer extends StateMachineGamer
 
 		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
 		this.INITIAL_HEUR_RECORD = (ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && !LOAD_HEUR_FILE;
+		this.USE_ALT_HIST_HEUR = this.RULE_GRAPH_FILE.equals("connect_four_debug.txt");
 //		System.out.println(params);
 	}
 
@@ -516,6 +518,22 @@ public class TestGamer extends StateMachineGamer
 	    	//Load archived MCT data from file
 	    	if(USE_TRANSFER) {
 	    		this.sMap.loadSourceStatesFromFile(MCT_READ_DIR + "/" + "MCT_combined.txt");
+//	    		for(int i=0;i<this.allRoles.size();i++) {
+//		    		HashMap<List<Integer>, Pair<Double, Long>> specific = this.sMap.getSourceStates().getSpecificMoveTotalData(i);
+//		        	HashMap<Integer, Pair<Double, Long>> general = this.sMap.getSourceStates().getGeneralMoveTotalData(i);
+//		        	System.out.println("*********** General Data for " + i + " ***********");
+//		        	for(int genMove : general.keySet()) {
+//		        		Pair<Double, Long> genData = general.get(genMove);
+//		        		double value = (genData.getKey() / genData.getValue());
+//		        		System.out.println(this.sMap.getSourceName(genMove) + ": " + value);
+//		        	}
+//		        	System.out.println("*********** Specific Data for " + i + " ***********");
+//		        	for(List<Integer> specMove : specific.keySet()) {
+//		        		Pair<Double, Long> specificData = specific.get(specMove);
+//		        		double value = (specificData.getKey() / specificData.getValue());
+//		        		System.out.println(this.sMap.getSourceName(specMove) + ": " + value);
+//		        	}
+//    			}
 	    	}
 
 	    	//Load heuristic file
@@ -529,6 +547,22 @@ public class TestGamer extends StateMachineGamer
 	    		System.out.println(historyData.get(0));
 	    		for(SymbolCountKey key : loadedSCRegression.get(0).regMap.keySet()) {
 	    			System.out.println("$ " + key.toNameString(this.sMap));
+	    		}
+	    		for(int i=0;i<this.allRoles.size();i++) {
+		    		System.out.println("*********** General History Data for " + i + " ***********");
+		        	for(int genMove : genHistoryData.get(i).keySet()) {
+		        		HistoryData genData = genHistoryData.get(i).get(genMove);
+		        		double value = (genData.totalReward / (double)genData.numOccs);
+		        		double winPercent = (genData.numWins / (double)genData.numOccs);
+		        		System.out.println(this.sMap.getTargetName(genMove) + ": " + value + " " + winPercent);
+		        	}
+		        	System.out.println("*********** Specific History Data for " + i + " ***********");
+		        	for(List<Integer> specMove : historyData.get(i).keySet()) {
+		        		HistoryData specData = historyData.get(i).get(specMove);
+		        		double value = (specData.totalReward / (double)specData.numOccs);
+		        		double winPercent = (specData.numWins / (double)specData.numOccs);
+		        		System.out.println(this.sMap.getTargetName(specMove) + ": " + specMove + " " + value + " " + winPercent);
+		        	}
 	    		}
 	    	}
 
@@ -768,7 +802,7 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
-    public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, boolean verbose) {
+    public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, Set<List<Move>> allMoveCombos, boolean verbose) {
     	List<Integer> moveList = this.sMap.convertMoveToList(m);
     	int genID = moveList.get(0);
 
@@ -811,21 +845,79 @@ public class TestGamer extends StateMachineGamer
 
     	double genHistVal = 0;
     	double genHistWeight = 0;
-    	double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
-    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
-    	if(this.genHistoryData.get(roleIndex).containsKey(genID)) {
-    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
-    		genHistVal = ((double)data.totalReward) / data.numOccs;
-//    		genHistWeight = Math.pow(Math.abs(genHistVal - midVal)/divisor, 2);
-    		genHistWeight = Math.abs(genHistVal - midVal)/divisor;
-    	}
-
     	double specHistVal = 0;
     	double specHistWeight = 0;
-    	if(this.historyData.get(roleIndex).containsKey(moveList)) {
-    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
-    		specHistVal = ((double)data.totalReward) / data.numOccs;
-    		specHistWeight = Math.abs(specHistVal - midVal)/divisor;
+
+    	if(USE_ALT_HIST_HEUR) {
+    		Set<Integer> availableGenMoves = new HashSet<Integer>();
+    		Set<List<Integer>> availableSpecMoves = new HashSet<List<Integer>>();
+    		for(List<Move> moveCombo : allMoveCombos) {
+    			List<Integer> currMove = this.sMap.convertMoveToList(moveCombo.get(roleIndex));
+    			if(this.genHistoryData.get(roleIndex).containsKey(currMove.get(0))) {
+    				availableGenMoves.add(currMove.get(0));
+    			}
+    			if(this.historyData.get(roleIndex).containsKey(currMove)) {
+    				availableSpecMoves.add(currMove);
+    			}
+    		}
+
+    		if(availableGenMoves.size() > 1) {
+	    		double minGenVal = 1000;
+	    		double maxGenVal = -1000;
+	    		for(int currMoveID : availableGenMoves) {
+	    			HistoryData data = this.genHistoryData.get(roleIndex).get(currMoveID);
+	    			double genMoveVal = data.totalReward / (double)data.numOccs;
+	    			if(genMoveVal > maxGenVal) {
+	    				maxGenVal = genMoveVal;
+	    			}
+	    			if(genMoveVal < minGenVal) {
+	    				minGenVal = genMoveVal;
+	    			}
+	    		}
+		    	double interval = maxGenVal - minGenVal;
+		    	if(this.genHistoryData.get(roleIndex).containsKey(genID) && interval > 0) {
+		    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+		    		genHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minGenVal) / interval;
+		    		genHistWeight = Math.abs(genHistVal - 0.5) * 2;
+		    	}
+    		}
+
+    		if(availableSpecMoves.size() > 1) {
+	    		double minSpecVal = 1000;
+	    		double maxSpecVal = -1000;
+	    		for(List<Integer> currMoveID : availableSpecMoves) {
+	    			HistoryData data = this.historyData.get(roleIndex).get(currMoveID);
+	    			double specMoveVal = data.totalReward / (double)data.numOccs;
+	    			if(specMoveVal > maxSpecVal) {
+	    				maxSpecVal = specMoveVal;
+	    			}
+	    			if(specMoveVal < minSpecVal) {
+	    				minSpecVal = specMoveVal;
+	    			}
+	    		}
+		    	double interval = maxSpecVal - minSpecVal;
+		    	if(this.historyData.get(roleIndex).containsKey(moveList) && interval > 0) {
+		    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
+		    		specHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minSpecVal) / interval;
+		    		specHistWeight = Math.abs(specHistVal - 0.5) * 2;
+		    	}
+    		}
+
+    	} else {
+	    	double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
+	    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
+	    	if(this.genHistoryData.get(roleIndex).containsKey(genID)) {
+	    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+	    		genHistVal = ((double)data.totalReward) / data.numOccs;
+	//    		genHistWeight = Math.pow(Math.abs(genHistVal - midVal)/divisor, 2);
+	    		genHistWeight = Math.abs(genHistVal - midVal)/divisor;
+	    	}
+
+	    	if(this.historyData.get(roleIndex).containsKey(moveList)) {
+	    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
+	    		specHistVal = ((double)data.totalReward) / data.numOccs;
+	    		specHistWeight = Math.abs(specHistVal - midVal)/divisor;
+	    	}
     	}
 
     	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight;
@@ -1772,9 +1864,9 @@ public class TestGamer extends StateMachineGamer
     			bestScore = currScore;
     		} else if(SELECTION_HEURISTIC && this.heuristicsReady && Math.abs(bestScore - currScore) < FLOAT_THRESH) {
     			if(bestHeuristic < 0) {
-    				bestHeuristic = this.calcHeuristicValue(bestMove.get(this.roleIndex), root.getChildren().get(bestMove), this.roleIndex, false);
+    				bestHeuristic = this.calcHeuristicValue(bestMove.get(this.roleIndex), root.getChildren().get(bestMove), this.roleIndex, root.getChildren().keySet(), false);
     			}
-    			double currHeuristic = this.calcHeuristicValue(move.get(this.roleIndex), root.getChildren().get(move), this.roleIndex, false);
+    			double currHeuristic = this.calcHeuristicValue(move.get(this.roleIndex), root.getChildren().get(move), this.roleIndex, root.getChildren().keySet(), false);
     			if(currHeuristic > bestHeuristic) {
     				bestMove = move;
         			bestScore = currScore;
@@ -1783,8 +1875,9 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	System.out.println("Best Score: " + bestScore + " " + bestMove);
+    	System.out.println("Role: " + this.getRole());
     	if(this.heuristicsReady) {
-    		this.calcHeuristicValue(bestMove.get(roleIndex), this.root.getChildren().get(bestMove), this.roleIndex, true);
+    		this.calcHeuristicValue(bestMove.get(roleIndex), this.root.getChildren().get(bestMove), this.roleIndex, this.root.getChildren().keySet(), true);
     	}
     	return bestMove;
     }
@@ -1813,7 +1906,7 @@ public class TestGamer extends StateMachineGamer
     			sourceNodeTo = child.getNearestSourceNode(this.sMap);
     			currScore = ucb1WithTransfer(child, sourceNodeFrom, sourceNodeTo, moveCombo, turnIndex);
     		} else if(SELECTION_HEURISTIC && this.heuristicsReady) {
-    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex);
+    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
     		} else { //if selection transfer is disabled, just use regular UCB1
     			currScore = ucb1Basic(child, turnIndex);
     		}
@@ -1882,7 +1975,7 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    private double ucb1HeuristicGuided (MCTNode currNode, Move m, int turnIndex) {
+    private double ucb1HeuristicGuided (MCTNode currNode, Move m, int turnIndex, Set<List<Move>> allMoveCombos) {
     	double regularValue, regularExplore, finalValue;
     	if(currNode == null || currNode.getNumVisits() == 0) {
     		regularValue = 0;
@@ -1893,7 +1986,7 @@ public class TestGamer extends StateMachineGamer
     		regularExplore = EXPLORE_PARAM*Math.sqrt(Math.log(currNode.getTotalParentVisits())/currNode.getNumVisits());
     		double heuristicWeight = HEURISTIC_INITIAL * Math.pow(HEURISTIC_DECAY, currNode.getNumVisits()-1);
     		double regularWeight = 1 - heuristicWeight;
-    		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, false) / MAX_REWARD_VALUE;
+    		double heuristicValue = calcHeuristicValue(m, currNode, turnIndex, allMoveCombos, false) / MAX_REWARD_VALUE;
     		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
     	}
 
@@ -1998,7 +2091,7 @@ public class TestGamer extends StateMachineGamer
 					}
 					MCTNode currChild = currNode.getExpandedChild(currMove, this.existingNodes, SAVE_MCT_TO_FILE);
 
-					double heurScore = this.calcHeuristicValue(currMove.get(turnIndex), currChild, turnIndex, false);
+					double heurScore = this.calcHeuristicValue(currMove.get(turnIndex), currChild, turnIndex, currNode.getChildren().keySet(), false);
 					if(heurScore > bestScore) {
 						bestScore = heurScore;
 						selectedMove = currMove;
@@ -2035,10 +2128,12 @@ public class TestGamer extends StateMachineGamer
     	int depth = 0;
     	this.numRollouts ++;
     	List<Move> selectedMove = null;
+    	Set<List<Move>> allMoves = null;
 
     	while(!currNode.isTerminal() && depth < ROLLOUT_EVAL_DEPTH) {
     		currNode.expandChildren();
 			selectedMove = randomMove(currNode);
+			allMoves = currNode.getChildren().keySet();
 
     		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
 			for(int i=0;i<convertedMove.size();i++) {
@@ -2053,7 +2148,7 @@ public class TestGamer extends StateMachineGamer
     		List<Double> heurRewards = new ArrayList<Double>();
     		currNode.expandChildren();
     		for(int i=0;i<this.allRoles.size();i++) {
-    			double heur = this.calcHeuristicValue(selectedMove.get(i), currNode, i, false);
+    			double heur = this.calcHeuristicValue(selectedMove.get(i), currNode, i, allMoves, false);
     			heurRewards.add(heur);
     		}
 //    		System.out.println("H: " + heurRewards);
