@@ -878,7 +878,7 @@ public class TestGamer extends StateMachineGamer
 		    	if(this.genHistoryData.get(roleIndex).containsKey(genID) && interval > 0) {
 		    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
 		    		genHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minGenVal) / interval;
-		    		genHistWeight = Math.abs(genHistVal - 0.5) * 2;
+		    		genHistWeight = Math.abs(genHistVal/(double)MAX_REWARD_VALUE - 0.5) * 2;
 		    	}
     		}
 
@@ -899,7 +899,7 @@ public class TestGamer extends StateMachineGamer
 		    	if(this.historyData.get(roleIndex).containsKey(moveList) && interval > 0) {
 		    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
 		    		specHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minSpecVal) / interval;
-		    		specHistWeight = Math.abs(specHistVal - 0.5) * 2;
+		    		specHistWeight = Math.abs(specHistVal/(double)MAX_REWARD_VALUE - 0.5) * 2;
 		    	}
     		}
 
