@@ -119,7 +119,7 @@ public class TestGamer extends StateMachineGamer
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
 	public static final long TIME_THRESHOLD = 5000;
-	public static final double EXPLORE_PARAM = 0.4;//Math.sqrt(2);
+	public static final double EXPLORE_PARAM = 0.8;//0.4;//Math.sqrt(2);
 	public static final double NEW_EXPLORE_VALUE = 1000000;
 	public static final int ROLLOUT_MAX_DEPTH = 220;
 	public static final double MAX_REWARD_VALUE = 100.0;

@@ -77,6 +77,7 @@ public class ContextEditDistance {
 	public static final float BASE_ARG_NUM_MISMATCH_COST = 0.1f;
 	public static final float DEPTH_REDUCED_ARG_NUM_MISMATCH_COST = 0;//0.2f;
 	public static final float ARG_DIST_PROPORTION = 0.5f;
+	public static final float USERP_THRESH = 0.02f;
 
 	public static final float AVG_COST_WEIGHT = 0.8f;
 	public static final float RAW_NUM_SUCCESSFUL_WEIGHT = 0.18f;
@@ -602,7 +603,7 @@ public class ContextEditDistance {
 						this.numExpanded += newOcc.getNumExpanded();
 						this.occurrences.add(newOcc);
 					} else {
-						System.out.println("ERROR: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes");
+						System.out.println("ERROR1: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes, " + child.getColour());
 					}
 				}
 			} else if(colour == RuleNodeColour.NON_VAR_SYM_PROP.getVal()) {
@@ -619,7 +620,7 @@ public class ContextEditDistance {
 						this.numExpanded += newOcc.getNumExpanded();
 						this.occurrences.add(newOcc);
 					} else {
-						System.out.println("ERROR: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes");
+						System.out.println("ERROR2: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes, " + child.getColour());
 					}
 				}
 			} else if(colour == RuleNodeColour.NON_VAR_SYM_FUNC.getVal()) {
@@ -646,8 +647,19 @@ public class ContextEditDistance {
 						newArg.expand(knownNodes, nameTable, 1);
 						this.numExpanded += newArg.getNumExpanded();
 						this.args.add(newArg);
+					} else if(child.getColour() == RuleNodeColour.PRED_OC) {
+						RelationshipNode newOcc;
+						if(knownNodes.containsKey(child.getId())) {
+							newOcc = knownNodes.get(child.getId());
+						} else {
+							newOcc = new RelationshipNode(child);
+						}
+						knownNodes.put(child.getId(), newOcc);
+						newOcc.expand(knownNodes, nameTable, 1);
+						this.numExpanded += newOcc.getNumExpanded();
+						this.occurrences.add(newOcc);
 					} else {
-						System.out.println("ERROR: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes");
+						System.out.println("ERROR3: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes, " + child.getColour());
 					}
 				}
 			} else if(colour == RuleNodeColour.NON_VAR_SYM_RELATION.getVal()) {
@@ -675,7 +687,7 @@ public class ContextEditDistance {
 						this.numExpanded += newArg.getNumExpanded();
 						this.args.add(newArg);
 					} else {
-						System.out.println("ERROR: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes");
+						System.out.println("ERROR4: Unexpected type for child of " + baseNode.getName() + " while generating occurrence nodes, " + child.getColour());
 					}
 				}
 			} else {
@@ -1451,7 +1463,7 @@ public class ContextEditDistance {
 //						System.out.println("Score: " + bestSecondScore + "; Unique: " + (!secondNonUnique));
 //					}
 
-					if(g1BestSecondNode == null || bestFirstScore < bestSecondScore) { //make first assignment
+					if(g1BestSecondNode == null || bestFirstScore < bestSecondScore + USERP_THRESH) { //make first assignment
 						g1NodesRemaining.remove(g1BestNode);
 						g2NodesRemaining.remove(g2BestNode);
 						mapping.put(g1BestNode.getBaseNode().getId(), g2BestNode.getBaseNode().getId());
