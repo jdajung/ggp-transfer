@@ -97,13 +97,10 @@ public class TestGamer extends StateMachineGamer
 	private boolean heuristicsReady;
 
 	//These are initialization parameters explained in and set by AutoPlayer
-	public boolean USE_TRANSFER = false;
+	public boolean USE_TRANSFER = false; //This is a deprecated parameter that is still occasionally useful for debugging purposes
 	public boolean ROLLOUT_ORDERING;
-	public boolean USE_PLAY_TRANSFER = false;
 	public boolean NW_ENABLED;
-	public boolean USE_SELECTION_TRANSFER = false;
 	public boolean SELECTION_HEURISTIC;
-	public boolean USE_ROLLOUT_TRANSFER = false;
 	public boolean EARLY_ROLLOUT_EVAL;
 	public double PLAY_TRANSFER_RATIO = 0.5;
 	public boolean LOAD_HEUR_FILE;
@@ -119,7 +116,7 @@ public class TestGamer extends StateMachineGamer
 	public int NUM_SAVED_MCT_NODES = -1; //10000; //-1 to save all (may be way too many to do this)
 
 	public static final long TIME_THRESHOLD = 5000;
-	public static final double EXPLORE_PARAM = 0.8;//0.4;//Math.sqrt(2);
+	public static final double EXPLORE_PARAM = 0.4;//0.4;//Math.sqrt(2);
 	public static final double NEW_EXPLORE_VALUE = 1000000;
 	public static final int ROLLOUT_MAX_DEPTH = 220;
 	public static final double MAX_REWARD_VALUE = 100.0;
@@ -140,8 +137,8 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_DECAY_PER_VISIT = 0.9;
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
 
-	public static final double HEURISTIC_INITIAL = 0.9;
-	public static final double HEURISTIC_DECAY = 0.9;
+	public static final double HEURISTIC_INITIAL = 1.0;//0.9;
+	public static final double HEURISTIC_DECAY = 0.99;//0.9;
 
 	public static final double FLOAT_THRESH = 0.00001;
 	public static final int WIN_THRESH = 80;
@@ -198,18 +195,11 @@ public class TestGamer extends StateMachineGamer
 	//This is a janky hack to set parameters that should be set in the constructor
 	//But the GGP library only allows default constructors, so whatever
 	public void initParams(List<?> params) {
-
-//		this.USE_TRANSFER = (Boolean)(params.get(0));
-//		this.USE_PLAY_TRANSFER = (Boolean)(params.get(1));
 		this.NW_ENABLED = (Boolean)(params.get(0));
-//		this.USE_SELECTION_TRANSFER = (Boolean)(params.get(2));
 		this.SELECTION_HEURISTIC = (Boolean)(params.get(1));
 		this.ROLLOUT_ORDERING = (Boolean)(params.get(2));
-//		this.USE_ROLLOUT_TRANSFER = (Boolean)(params.get(3));
 		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
-//		this.PLAY_TRANSFER_RATIO = (Double) params.get(4);
 		this.LOAD_HEUR_FILE = (Boolean)(params.get(4));
-//		this.SELECTION_TRANSFER_RATIO = (Double) params.get(5);
 		this.RULE_GRAPH_FILE = (String)(params.get(5));
 		this.SAVE_RULE_GRAPH_TO_FILE = (Boolean)(params.get(6));
 		this.SAVE_MCT_TO_FILE = (Boolean)(params.get(7));
@@ -483,11 +473,58 @@ public class TestGamer extends StateMachineGamer
     	RuleGraph g = new RuleGraph(this.rules, allRoles);
     	g.genRuleGraph();
 
+//    	System.out.println("cell:" + g.getTopLevelNames().get("cell"));
+//    	System.out.println("wp:" + g.getTopLevelNames().get("wp"));
+//    	System.out.println("wk:" + g.getTopLevelNames().get("wk"));
+//    	System.out.println("doublejump:" + g.getTopLevelNames().get("doublejump"));
+
     	//save target rule graph to file
     	if(SAVE_RULE_GRAPH_TO_FILE) {
 	    	RuleGraphRecord saveRec = new RuleGraphRecord(g); //Uncomment these 2 lines to save rule graph to file
 	    	saveRec.saveToFile("last_rule_graph.txt", true);
     	}
+
+
+    	//Library comparison timing
+//    	String[] libFileNames = {"checkers_debug.txt", "breakthrough_debug.txt", "8_queens_lg_debug.txt", "chess_debug.txt", "tictactoe_debug.txt", "connect_four_debug.txt"};
+//    	int numTrials = 10;
+//    	long[][] trialTimes = new long[numTrials][libFileNames.length];
+//    	float[][] trialDists = new float[numTrials][libFileNames.length];
+//
+//    	for(int i=0;i<numTrials;i++) {
+//    		for(int j=0;j<libFileNames.length;j++) {
+//	    		long startTime = System.currentTimeMillis();
+//		    	RuleGraphRecord rec = new RuleGraphRecord();
+//		    	rec.loadFromFile(libFileNames[j], true);  //Load source rule graph from file
+//		    	StateMapping currMap = new StateMapping(g, rec);
+//		    	long endTime = System.currentTimeMillis();
+//		    	trialTimes[i][j] = endTime - startTime;
+//		    	trialDists[i][j] = currMap.getEdit().getDistance();
+//    		}
+//    	}
+//    	long allTrialTime = 0;
+//    	for(int i=0;i<numTrials;i++) {
+//    		System.out.println("Trial " + i);
+//    		long totalTime = 0;
+//    		for(int j=0;j<libFileNames.length;j++) {
+//    			totalTime += trialTimes[i][j];
+//    		}
+//    		allTrialTime += totalTime;
+//    		System.out.println("Total time: " + totalTime);
+//    		System.out.println("All times: " + Arrays.toString(trialTimes[i]));
+//    		System.out.println("All distances: " + Arrays.toString(trialDists[i]));
+//    	}
+//    	double avgTrialTime = allTrialTime / ((double) numTrials);
+//    	DecimalFormat distFormat = new DecimalFormat("0.000");
+//    	DecimalFormat msFormat = new DecimalFormat("0");
+//    	System.out.println("Average trial time: " + avgTrialTime);
+//    	String tableLine = "";
+//    	for(int j=0;j<libFileNames.length;j++) {
+//    		tableLine += distFormat.format(trialDists[0][j]) + " & ";
+//    	}
+//    	tableLine += msFormat.format(avgTrialTime);
+//    	System.out.println(tableLine);
+
 
     	for(int i=0;i<this.allRoles.size();i++) {
     		this.playedMobility.numEntriesPerPlayer.add(0);
@@ -512,7 +549,10 @@ public class TestGamer extends StateMachineGamer
 	//    	recordViewer.drawTopLevel(2, "record_images/");
 
 	    	//Do symbol mapping
+//	    	long startTime = System.currentTimeMillis();
 	    	this.sMap = new StateMapping(g, rec);
+//	    	long endTime = System.currentTimeMillis();
+//	    	System.out.println("############## " + (endTime-startTime));
 	    	System.out.println(sMap.getEdit().mappedNamesToString());
 
 	    	//Load archived MCT data from file
@@ -539,14 +579,26 @@ public class TestGamer extends StateMachineGamer
 	    	//Load heuristic file
 	    	if(LOAD_HEUR_FILE) {
 	    		this.loadHeuristicFile();
+
 	    		System.out.println("$$$$$$$$$$$$$$$$$ Heuristic Load $$$$$$$$$$$$$$$$$");
-	    		System.out.println(loadedSCRegression.get(0).avgR + " " + loadedSCRegression.get(0).regMap);
-	    		System.out.println(loadedMobRegression.get(0).getR() + " " + loadedMobRegression.get(0).getN());
-	    		System.out.println(loadedNWRegression.get(0).getR() + " " + loadedNWRegression.get(0).getN());
-	    		System.out.println(genHistoryData.get(0));
-	    		System.out.println(historyData.get(0));
-	    		for(SymbolCountKey key : loadedSCRegression.get(0).regMap.keySet()) {
-	    			System.out.println("$ " + key.toNameString(this.sMap));
+//	    		loadedMobRegression.get(0).setR(0.9);
+//	    		loadedMobRegression.get(1).setR(0.9);
+
+//	    		SymbolCountKey whitePcs = new SymbolCountKey(2,15,3);
+//	    		SymbolCountKey blackPcs = new SymbolCountKey(5,15,3);
+//    			loadedSCRegression.get(0).regMap.get(whitePcs).setR(0.9);
+//    			loadedSCRegression.get(0).regMap.get(blackPcs).setR(-0.9);
+//    			loadedSCRegression.get(1).regMap.get(whitePcs).setR(-0.9);
+//    			loadedSCRegression.get(1).regMap.get(blackPcs).setR(0.9);
+
+
+	    		System.out.println(loadedSCRegression.get(roleIndex).avgR + " " + loadedSCRegression.get(roleIndex).regMap);
+	    		System.out.println(loadedMobRegression.get(roleIndex).getR() + " " + loadedMobRegression.get(roleIndex).getN());
+	    		System.out.println(loadedNWRegression.get(roleIndex).getR() + " " + loadedNWRegression.get(roleIndex).getN());
+	    		System.out.println(genHistoryData.get(roleIndex));
+	    		System.out.println(historyData.get(roleIndex));
+	    		for(SymbolCountKey key : loadedSCRegression.get(roleIndex).regMap.keySet()) {
+	    			System.out.println("$ " + key.toNameString(this.sMap) + " " + key + " " + loadedSCRegression.get(roleIndex).regMap.get(key).getR());
 	    		}
 	    		for(int i=0;i<this.allRoles.size();i++) {
 		    		System.out.println("*********** General History Data for " + i + " ***********");
@@ -617,10 +669,11 @@ public class TestGamer extends StateMachineGamer
 	    	this.recordMobility = false;
 	    	this.recordHistory = false;
 	    	System.out.println(heurTimeEnd - heurTimeStart);
-	    	System.out.println("SC: " + this.scRegression.get(0).toNameString(this.sMap));
+	    	System.out.println("SC: " + this.scRegression.get(roleIndex).toNameString(this.sMap));
+	    	System.out.println("Mobility: " + this.mobRegression.get(roleIndex).getR());
 	    	System.out.println("Gen History:");
-	    	for(int moveID : this.genHistoryData.get(0).keySet()) {
-	    		HistoryData data = this.genHistoryData.get(0).get(moveID);
+	    	for(int moveID : this.genHistoryData.get(roleIndex).keySet()) {
+	    		HistoryData data = this.genHistoryData.get(roleIndex).get(moveID);
 	    		System.out.println(this.sMap.getTargetName(moveID) + ": " + ((double)data.totalReward) / data.numOccs);
 	    	}
 	    	System.out.println();
@@ -792,6 +845,8 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
+
+    //If a predicted value falls outside of the range of possible reward values, clamp it to the boundary
     public static double clampRewardVal(double val) {
     	if(val < MIN_REWARD_VALUE) {
     		return MIN_REWARD_VALUE;
@@ -802,6 +857,9 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
+
+    //Calculates the combined heuristic evaluation function described in Section 3.1
+    //Note: there is an option for an alternate history heuristic calculation that was not used for the paper
     public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, Set<List<Move>> allMoveCombos, boolean verbose) {
     	List<Integer> moveList = this.sMap.convertMoveToList(m);
     	int genID = moveList.get(0);
@@ -944,15 +1002,11 @@ public class TestGamer extends StateMachineGamer
     	node.getHeuristicGoals().set(roleIndex, result);
     	return result;
     }
-//
-//    public float calcSCValue(MCTNode node, int roleIndex) {
-//
-//    }
-//
-//    public float calcSCWeight(int roleIndex) {
-//
-//    }
 
+
+
+    //Calls all functions that calculate heuristic parameters
+    //Used at the end of the start clock
     public void prepHeuristics() {
     	this.usefulSymKeys = trimUnchangingSyms();
     	this.scRegression = new ArrayList<SCRegressionContainer>();
@@ -966,45 +1020,13 @@ public class TestGamer extends StateMachineGamer
     	this.heuristicsReady = true;
     }
 
-//    public float calcMobValue(MCTNode node, int roleIndex) {
-//    	int currMob = node.getChildren().size() - node.getNumSiblings();
-//    	float result = 0;
-//    	if(this.compiledMobData.size() > 0) {
-//    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
-//    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
-//    			float winAvg = ((float)data.totalWinValue)/data.numWins;
-//    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
-//    			float winDist = Math.abs(currMob - winAvg);
-//    			float lossDist = Math.abs(currMob - lossAvg);
-//    			if(Math.abs(winAvg - lossAvg) > FLOAT_THRESH) { //No useful information if win and lost avgs are equal
-//    				result = lossDist / (winDist + lossDist);
-//    			}
-//    		}
-//    	}
-//    	return result;
-//    }
-//
-//    public float calcMobWeight(int roleIndex) {
-//    	float result = 0;
-//    	if(this.compiledMobData.size() > 0) {
-//    		MobilityHeurData data = this.compiledMobData.get(roleIndex);
-//    		if(data.numWins > 0 && data.numLosses > 0) { //There is no useful information if there aren't at least some wins and some losses
-//    			float winAvg = ((float)data.totalWinValue)/data.numWins;
-//    			float lossAvg = ((float)data.totalLossValue)/data.numLosses;
-//    			float intervalSize = Math.abs(data.maxValue - data.minValue);
-//    			if(intervalSize > FLOAT_THRESH) {
-//    				result = Math.abs(winAvg - lossAvg) / intervalSize;
-//    			}
-//    		}
-//    	}
-//    	return result;
-//    }
 
 
     public static SCRegressionContainer doSCRegression(List<FullRolloutData> scData, Set<SymbolCountKey> usefulKeys, int roleIndex) {
     	return doSCRegression(scData, usefulKeys, roleIndex, new SCRegressionContainer());
     }
 
+    //Calculate heuristic parameters for the symbol counting heuristic
     //if usefulKeys = null, then assume all keys are useful
     public static SCRegressionContainer doSCRegression(List<FullRolloutData> scData, Set<SymbolCountKey> usefulKeys, int roleIndex, SCRegressionContainer container) {
 //    	SCRegressionContainer container = new SCRegressionContainer();
@@ -1058,12 +1080,13 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+
     public static SimpleRegression doMobilityRegression(List<MobilityData> mobData, int roleIndex) {
     	return doMobilityRegression(mobData, roleIndex, new SimpleRegression());
     }
 
+    //Calculate heuristic parameters for the mobility heuristic
     public static SimpleRegression doMobilityRegression(List<MobilityData> mobData, int roleIndex, SimpleRegression reg) {
-//    	SimpleRegression reg = new SimpleRegression();
     	for(MobilityData currData : mobData) {
     		if(currData.numEntriesPerPlayer.get(roleIndex) > 0) {
     			double x = currData.totalMobPerPlayer.get(roleIndex) / currData.numEntriesPerPlayer.get(roleIndex);
@@ -1075,18 +1098,16 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+
+
     public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex) {
     	return doNearestWinRegression(root, roleIndex, new SimpleRegression());
     }
 
-//    public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex, SimpleRegression reg) {
-//    	List<MCTNode> allNodes = queueNoPriority(-1, root);
-//    	return doNearestWinRegression(allNodes, roleIndex, reg);
-//    }
-
+    //Calculate heuristic parameters for the nearest win heuristic from simulated states
+    //Note: nearest win heuristic is not used in the paper
     public static SimpleRegression doNearestWinRegression(MCTNode root, int roleIndex, SimpleRegression reg) {
     	List<MCTNode> allNodes = queueNoPriority(-1, root);
-//    	SimpleRegression reg = new SimpleRegression();
     	for(MCTNode currNode : allNodes) {
     		double x = currNode.getNearestWin().get(roleIndex);
     		if(x >= 0) {
@@ -1097,9 +1118,11 @@ public class TestGamer extends StateMachineGamer
     	return reg;
     }
 
+
+
+    //Calculate heuristic parameters for the nearest win heuristic from states read from file
+    //Note: nearest win heuristic is not used in the paper
     public static SimpleRegression doNearestWinRegression(List<ReducedMCTNode> allNodes, int roleIndex, SimpleRegression reg) {
-//    	List<MCTNode> allNodes = queueNoPriority(-1, root);
-//    	SimpleRegression reg = new SimpleRegression();
     	for(ReducedMCTNode currNode : allNodes) {
     		double x = currNode.getNearestWin().get(roleIndex);
     		if(x >= 0) {
@@ -1111,17 +1134,6 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-//    public static GenHistoryRegressionContainer doGenHistoryRegression(List<Map<Integer, HistoryData>> histData, int roleIndex) {
-//    	GenHistoryRegressionContainer container = new GenHistoryRegressionContainer();
-//    	for(int moveID : histData.get(roleIndex).keySet()) {
-//    		HistoryData currData = histData.get(roleIndex).get(moveID);
-//    		if(!container.regMap.containsKey(moveID)) {
-//    			container.regMap.put(moveID, new SimpleRegression());
-//    		}
-//    		SimpleRegression reg = container.regMap.get(moveID);
-//
-//    	}
-//    }
 
 
     //Just put all the nodes in the subtree rooted at root into a List with no particular ordering
@@ -1149,7 +1161,7 @@ public class TestGamer extends StateMachineGamer
 
     //assigns a score to the given MCTNode
     //nodes with a higher score will prioritized for saving to file
-    //currently, this method is only called when saving the nodes from a single game instance. It doesn't really affect anything because we save all of the nodes with at least 2 visits.
+    //currently, this method is only called when saving the nodes from a single game instance. It doesn't really affect anything because we save all of the nodes with at least 4 visits.
     private float MCTNodePriorityScore(MCTNode node, int maxVisits) {
     	float result = 0;
 
@@ -1161,8 +1173,7 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    //This function queues up all of the MCT nodes with at least 2 visits for saving.
-    //It also calculates the general and specific move data described in the "Archiving Information" subsection
+    //This function queues up all of the MCT nodes with at least 4 visits for saving.
     //give -1 to numNodes to queue the whole MCT (except nodes with only 1 visit)
     private LinkedList<MCTNode> queueNodes(int numNodes) {
     	LinkedList<MCTNode> result = new LinkedList<MCTNode>();
@@ -1298,7 +1309,7 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-
+    //for printing a move without commas
     public String moveToIDString(List<Integer> move) {
     	String result = "( ";
     	for(int item : move) {
@@ -1394,6 +1405,7 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //deprecated function
     public void compileSCData() {
     	this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>(); //Inner list contains data for each player
     	int numRoles = this.allRoles.size();
@@ -1432,6 +1444,7 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //deprecated function
     public void compileMobilityData() {
     	this.compiledMobData = new ArrayList<MobilityHeurData>();
     	int numRoles = this.allRoles.size();
@@ -1463,9 +1476,9 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //This method saves an MCT to file for one instance of a game. The archives built in Section 3.2 will be built from these files.
     //give -1 to numNodes to save the whole MCT
     //returns the number of nodes saved to file
-    //This method saves an MCT to file for one instance of a game. The archives built in the "Archiving Information" subsection will be built from these files.
     public int saveMctToFile(String outFileName, int numNodes) {
 		if(origRoot == null) {
 			System.out.println("ERROR in saveMctToFile: MCT has not been initialized.");
@@ -1474,18 +1487,9 @@ public class TestGamer extends StateMachineGamer
 		LinkedList<MCTNode> q = queueNodes(numNodes);
 		int numRoles = this.allRoles.size();
 
-		//Symbol Counting Heuristic
-//		String symbolCountStr[] = new String[numRoles];
-//		for(int i=0;i<numRoles;i++) {
-//
-//		}
-
 		if(this.usefulSymKeys == null) {
 			this.usefulSymKeys = trimUnchangingSyms();
 		}
-//		for(SymbolCountKey key : this.usefulSymKeys) {
-//			System.out.println(key.toNameString(this.sMap));
-//		}
 
 		String scMaxMinStr = "";
 		String symbolCountStr = "";
@@ -1512,26 +1516,6 @@ public class TestGamer extends StateMachineGamer
 		}
 		scMaxMinStr += "\n";
 		symbolCountStr += "\n";
-//		this.compileSCData();
-//		Map<SymbolCountKey, List<SymbolCountHeurData>> allSCData = this.compiledSCData;
-//
-//		String symbolCountStr = "";
-//		for(SymbolCountKey key : this.usefulSymKeys) {
-//			symbolCountStr += key.mainSym + " " + key.parentSym + " " + key.posn + " ";
-//			for(int i=0;i<numRoles;i++) {
-//				SymbolCountHeurData currData = allSCData.get(key).get(i);
-//				symbolCountStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
-//						" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " ";
-//				if(i < numRoles-1) {
-//					symbolCountStr += "& ";
-//				}
-//			}
-//			symbolCountStr += "* ";
-//		}
-//		symbolCountStr += "\n";
-
-		//Mobility Heuristic
-//		this.compileMobilityData();
 
 		String mobilityStr = "";
 		for(MobilityData data : this.mobilityData) {
@@ -1541,16 +1525,6 @@ public class TestGamer extends StateMachineGamer
 			mobilityStr += "* ";
 		}
 		mobilityStr += "\n";
-
-//		for(int i=0;i<numRoles;i++) {
-//			MobilityHeurData currData = this.compiledMobData.get(i);
-//			mobilityStr += currData.totalWinValue + " " + currData.totalLossValue + " " + currData.totalOtherValue + " " + currData.numWins +
-//					" " + currData.numLosses + " " + currData.numOther + " " + currData.maxValue + " " + currData.minValue + " ";
-//			if(i < numRoles-1) {
-//				mobilityStr += "& ";
-//			}
-//		}
-//		mobilityStr += "\n";
 
 
 		System.out.println("********************");
@@ -1767,8 +1741,6 @@ public class TestGamer extends StateMachineGamer
 		}
 
 
-
-
 		//Write data to file
 		File file = new File(outFileName);
         FileWriter fr = null;
@@ -1810,16 +1782,11 @@ public class TestGamer extends StateMachineGamer
 
 
     //pick the immediate best move for us
-    //This method implements transfer for the Action Taken (A) described in the "Knowledge Transfer" subsection
+    //In the event of an exact tie, use our heuristic evaluation function to break it
     private List<Move> selectBestMove() {
     	List<Move> bestMove = null;
     	double bestScore = -1000;
     	double bestHeuristic = -1000;
-		ReducedMCTNode sourceNodeFrom = null;
-
-		if(USE_TRANSFER && USE_PLAY_TRANSFER) {
-			sourceNodeFrom = root.getNearestSourceNode(this.sMap);
-		}
 
 		int maxVisits = 0;
 		if(PLAY_SELECT_MODE.equals("visits")) {
@@ -1850,18 +1817,7 @@ public class TestGamer extends StateMachineGamer
     			System.out.println("ERROR: Invalid mode for selecting best move.");
     		}
 
-    		if(USE_TRANSFER && USE_PLAY_TRANSFER) { // This is where the transfer happens
-    			ReducedMCTNode sourceNodeTo = currNode.getNearestSourceNode(this.sMap);
-    			double currMoveHeuristic = transferHeuristic(sourceNodeFrom, sourceNodeTo, move, currNode.getPercentSharedStates(), this.roleIndex);
-//    			System.out.println("! " + currScore + " " + currMoveHeuristic + " " + move);
-
-	    		currScore = currMoveHeuristic*PLAY_TRANSFER_RATIO + currScore*(1-PLAY_TRANSFER_RATIO);
-    		}
-
-
     		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getHeuristicGoals().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
-//    		System.out.println(ucb1Basic(currNode, this.roleIndex));
-//    		System.out.println("# " + currNode.getNumSiblings());
 
     		if(bestMove == null || currScore > bestScore+FLOAT_THRESH) {
     			bestMove = move;
@@ -1879,7 +1835,7 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	System.out.println("Best Score: " + bestScore + " " + bestMove);
-    	System.out.println("Role: " + this.getRole());
+    	System.out.println("Role: " + this.getRole() + ", Move: " + (this.numTurns+1));
     	if(this.heuristicsReady) {
     		this.calcHeuristicValue(bestMove.get(roleIndex), this.root.getChildren().get(bestMove), this.roleIndex, this.root.getChildren().keySet(), true);
     	}
@@ -1888,30 +1844,19 @@ public class TestGamer extends StateMachineGamer
 
 
     //select a child of the currNode to explore during the selection phase of MCTS
-    //This method implements Selection (S) transfer, described in the "Knowledge Transfer" subsection
+    //For a TI-GMCTS agent, selection is guided by the modified UCB1 score described in Section 3.1
     //turnIndex gives the index of the role whose turn it is (negatives denote special cases)
-    //timeFraction gives the % of time allotted for MCT expansion that has already passed
     private List<Move> selectChild(MCTNode currNode, int turnIndex) {
-    	MCTNode selected = null;
     	List<Move> selectedCombo = null;
     	double bestScore = -1000;
     	ArrayList<List<Move>> bestCombos = new ArrayList<List<Move>>();
-    	ReducedMCTNode sourceNodeFrom = null;
-
-    	if(USE_TRANSFER && USE_SELECTION_TRANSFER) {
-    		sourceNodeFrom = currNode.getNearestSourceNode(this.sMap);
-    	}
 
     	for(List<Move> moveCombo : currNode.getChildren().keySet()) { //consider each possible child node
     		MCTNode child = currNode.getChildren().get(moveCombo);
-    		ReducedMCTNode sourceNodeTo = null;
     		double currScore;
-    		if(USE_TRANSFER && USE_SELECTION_TRANSFER && child != null) { //if selection transfer is enabled, use a modified UCB1
-    			sourceNodeTo = child.getNearestSourceNode(this.sMap);
-    			currScore = ucb1WithTransfer(child, sourceNodeFrom, sourceNodeTo, moveCombo, turnIndex);
-    		} else if(SELECTION_HEURISTIC && this.heuristicsReady) {
+    		if(SELECTION_HEURISTIC && this.heuristicsReady) {
     			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
-    		} else { //if selection transfer is disabled, just use regular UCB1
+    		} else { //if selection guidance is disabled, just use regular UCB1
     			currScore = ucb1Basic(child, turnIndex);
     		}
 
@@ -1924,10 +1869,8 @@ public class TestGamer extends StateMachineGamer
     		}
 //    		System.out.println("% " + currScore);
     	}
-//    	System.out.println("%%% " + bestCombos.size() + " " + currNode.getChildren().keySet().size());
     	selectedCombo = bestCombos.get(rand.nextInt(bestCombos.size()));
-    	selected = currNode.getExpandedChild(selectedCombo, this.existingNodes, SAVE_MCT_TO_FILE);
-//    	System.out.println("Selected UCB1: " + bestScore + " Reward: " + selected.getTotalReward().get(turnIndex) + " Visits: " + selected.getNumVisits() + " Transfer: " + selected.getTransferTerm());
+    	currNode.getExpandedChild(selectedCombo, this.existingNodes, SAVE_MCT_TO_FILE);
     	return selectedCombo;
     }
 
@@ -1955,30 +1898,14 @@ public class TestGamer extends StateMachineGamer
     		result = NEW_EXPLORE_VALUE;
     	} else {
     		result = (r / MAX_REWARD_VALUE)/n + c*Math.sqrt(Math.log(bigN)/n);
-//    		System.out.println("***" + (r / MAX_REWARD_VALUE)/n + " " + c*Math.sqrt(Math.log(bigN)/n));
     	}
 //    	System.out.println(r + " " + n + " " + bigN + " " + c + " " + result);
 		return result;
     }
 
 
-    //This method produces a UCB1 value guided by selection transfer, as described in Equation 2 of the "Knowledge Transfer" subsection
-    private double ucb1WithTransfer (MCTNode currNode, ReducedMCTNode sourceNodeFrom, ReducedMCTNode sourceNodeTo, List<Move> targetMoveSet, int turnIndex) {
-    	double regularValue, regularExplore;
-    	if(currNode == null || currNode.getNumVisits() == 0) {
-    		regularValue = 0;
-    		regularExplore = NEW_EXPLORE_VALUE;
-    	} else {
-    		regularValue = (currNode.getTotalReward().get(turnIndex) / MAX_REWARD_VALUE) / currNode.getNumVisits();
-    		regularExplore = EXPLORE_PARAM*Math.sqrt(Math.log(currNode.getTotalParentVisits())/currNode.getNumVisits());
-    	}
-    	double transferValue = transferHeuristic(sourceNodeFrom, sourceNodeTo, targetMoveSet, currNode.getPercentSharedStates(), turnIndex);
-    	double combinedValue = SELECTION_TRANSFER_RATIO*transferValue + (1-SELECTION_TRANSFER_RATIO)*regularValue;
-//    	System.out.println("### " + targetMoveSet + " " + regularValue + " " + transferValue + " " + regularExplore + " " + combinedValue);
-    	return combinedValue + regularExplore;
-    }
-
-
+    //Produce a UCB1 value biased by our heuristic evaluation function
+    //Described in Section 3.1 of the paper
     private double ucb1HeuristicGuided (MCTNode currNode, Move m, int turnIndex, Set<List<Move>> allMoveCombos) {
     	double regularValue, regularExplore, finalValue;
     	if(currNode == null || currNode.getNumVisits() == 0) {
@@ -1994,7 +1921,7 @@ public class TestGamer extends StateMachineGamer
     		finalValue = heuristicValue*heuristicWeight + regularValue*regularWeight;
     	}
 
-//    		System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight + " " + regularExplore);
+//    	System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight + " " + regularExplore);
     	return finalValue + regularExplore;
     }
 
@@ -2017,65 +1944,8 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    //This function produces the transfer values shown in Figure 3 of the "Knowledge Transfer" subsection
-    //produces a value in [0,1] based on how good this move looks in the source game
-    //sourceNodeTo is the node in the source game that most closely matches the state that will be reached in the target game if the move is taken
-    //if sourceNodeTo is provided, this heuristic will consider its total reward and number of visits
-    //if sourceNodeTo is null, this contribution will be replaced by a best approximation using a matching move from sourceNodeFrom, if one exists
-    private double transferHeuristic(ReducedMCTNode sourceNodeFrom, ReducedMCTNode sourceNodeTo, List<Move> targetMoveSet, double fromSimilarity, int roleIndex) {
-    	double result = 0.0;
-    	double normalize = 0.0;
-    	HashMap<List<Integer>, Pair<Double, Long>> specific = this.sMap.getSourceStates().getSpecificMoveTotalData(roleIndex);
-    	HashMap<Integer, Pair<Double, Long>> general = this.sMap.getSourceStates().getGeneralMoveTotalData(roleIndex);
-    	List<List<Integer>> convertedMove = this.sMap.convertMoveToSource(targetMoveSet);
-
-//    	System.out.println("**** " + convertedMove.get(roleIndex));
-
-    	if(specific.containsKey(convertedMove.get(roleIndex))) { //generate value for specific move
-			Pair<Double, Long> specificData = specific.get(convertedMove.get(roleIndex));
-			double value = (specificData.getKey() / specificData.getValue());
-			double certainty = logistic(specificData.getValue());
-			result += value*certainty; // / bestSpecific;
-			normalize += certainty;
-//			System.out.println("*** Using specific move " + targetMoveSet + " value: " + value + " certainty: " + certainty + " <- " + specificData.getKey() + " " + specificData.getValue());
-		}
-
-    	if(general.containsKey(convertedMove.get(roleIndex).get(0))) { //generate value for general move
-			Pair<Double, Long> generalData = general.get(convertedMove.get(roleIndex).get(0));
-			double value = (generalData.getKey() / generalData.getValue());
-			double certainty = logistic(generalData.getValue());
-			result += value*certainty; // / bestGeneral;
-			normalize += certainty;
-//			System.out.println("*** Using general move " + targetMoveSet + " value: " + value + " certainty: " + certainty + " <- " + generalData.getKey() + " " + generalData.getValue());
-		}
-
-    	if(sourceNodeTo != null && sourceNodeTo.getNumVisits() > 0) { //generate value for state
-    		double value = sourceNodeTo.getTotalReward().get(roleIndex) / MAX_REWARD_VALUE / sourceNodeTo.getNumVisits();
-    		double certainty = logistic(sourceNodeTo.getNumVisits()) * stateLogistic(fromSimilarity);
-    		result += value*certainty;
-    		normalize += certainty;
-//    		System.out.println("*** Using node similar to child " + targetMoveSet + " value: " + value + " certainty: " + certainty + " <- " + sourceNodeTo.getTotalReward().get(roleIndex) / MAX_REWARD_VALUE + " " + sourceNodeTo.getNumVisits() + " " + fromSimilarity);
-    	} else { //generate value for state for rollouts
-	    	if(sourceNodeFrom.getChildData().containsKey(convertedMove)) { //nearest state has data on this specific move
-	    		Pair<List<Double>, Integer> childData = sourceNodeFrom.getChildData().get(convertedMove);
-	    		double value = (childData.getKey().get(roleIndex) / MAX_REWARD_VALUE) / childData.getValue();
-	    		double certainty = logistic(childData.getValue()) * stateLogistic(fromSimilarity);
-				result += value*certainty;
-				normalize += certainty;
-//				System.out.println("*** Using exact move in position " + targetMoveSet + " value: " + value + " certainty: " + certainty + " <- " + childData.getKey().get(roleIndex) / MAX_REWARD_VALUE + " " + childData.getValue() + " " + fromSimilarity);
-			}
-    	}
-
-		if(normalize > 0) {
-			result = result / normalize;
-		} else {
-			result = 0.5;
-		}
-
-    	return result;
-    }
-
-
+    //Perform a rollout where actions are selected based on their heuristic value
+    //Not used in the paper
     private MCTNode rolloutHeuristicOrdered (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
     	MCTNode currNode = startNode;
     	int depth = 0;
@@ -2120,13 +1990,15 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	if(this.numRollouts % 10 == 0) {
-    		System.out.println(NW_ENABLED + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    		System.out.println(LOAD_HEUR_FILE + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
     	}
 
     	return currNode;
     }
 
 
+    //Perform a rollout that terminates early. Actions are selected randomly.
+    //Not used in the paper
     private MCTNode rolloutEarlyEval (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
     	MCTNode currNode = startNode;
     	int depth = 0;
@@ -2155,55 +2027,26 @@ public class TestGamer extends StateMachineGamer
     			double heur = this.calcHeuristicValue(selectedMove.get(i), currNode, i, allMoves, false);
     			heurRewards.add(heur);
     		}
-//    		System.out.println("H: " + heurRewards);
     		currNode.setHeuristicGoals(heurRewards);
     	}
 
     	if(this.numRollouts % 10 == 0) {
-    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    		System.out.println(LOAD_HEUR_FILE + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
     	}
 
     	return currNode;
     }
 
 
-    //Perform a rollout. If Rollout Transfer (R) is enabled, then influence rollouts as described in the "Knowledge Transfer" subsection
-    //movesTaken will be altered by the addition of moves taken during the rollout
+    //Perform a rollout, and produce the terminal node reached. Actions are selected randomly.
     private MCTNode rollout (MCTNode startNode, Set<Set<List<Integer>>> statesOnPath, ArrayList<MCTNode> pathInOrder, ArrayList<Set<List<Integer>>> movesTaken) {
     	MCTNode currNode = startNode;
     	int depth = 0;
     	this.numRollouts ++;
-//    	if(this.numRollouts % 10 == 0) {
-//    		System.out.println(this.numRollouts + " rollouts");
-//    	}
+
     	while(!currNode.isTerminal() && depth < ROLLOUT_MAX_DEPTH) {
     		currNode.expandChildren();
-    		List<Move> selectedMove;
-    		if(USE_TRANSFER && USE_ROLLOUT_TRANSFER) {
-    			ReducedMCTNode nearestNode = currNode.getNearestSourceNode(this.sMap);
-    			selectedMove = null;
-    			List<List<Integer>> nearestMove = null;
-    			double bestScore = 0.0;
-    			List<List<Integer>> bestNearestMove = null;
-
-    			for(List<Move> currMove : currNode.getChildren().keySet()) { //find a transfer value for each possible move
-    				int turnIndex = currNode.getWhoseTurn();
-    				if(turnIndex < 0) {
-    					turnIndex = 0;
-    				}
-    				double currTransfer = transferHeuristic(nearestNode, null, currMove, currNode.getPercentSharedStates(), turnIndex);
-    				if(currTransfer > bestScore) {
-    					bestScore = currTransfer;
-    					selectedMove = currMove;
-    				}
-    			}
-
-    			if(selectedMove == null) {
-    				selectedMove = randomMove(currNode);
-    			}
-    		} else {
-    			selectedMove = randomMove(currNode);
-    		}
+    		List<Move> selectedMove = randomMove(currNode);
     		List<List<Integer>> convertedMove = this.sMap.convertMoveToList(selectedMove);
 			for(int i=0;i<convertedMove.size();i++) {
 				movesTaken.get(i).add(convertedMove.get(i));
@@ -2218,13 +2061,15 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	if(this.numRollouts % 10 == 0) {
-    		System.out.println(USE_PLAY_TRANSFER + " " + USE_SELECTION_TRANSFER + " " + USE_ROLLOUT_TRANSFER + " " + MCT_READ_DIR + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    		System.out.println(LOAD_HEUR_FILE + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
     	}
 
     	return currNode;
     }
 
 
+    //Remove keys for symbol counts that are not affected by player actions
+    //Described in Section 3.1 of the paper
     private Set<SymbolCountKey> trimUnchangingSyms() {
     	Set<SymbolCountKey> resultList = new HashSet<SymbolCountKey>();
     	for(int depth : this.uniqueSymOccs.keySet()) {
@@ -2239,6 +2084,8 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //A version of backpropagation used when rollouts are terminated early with reward equal to their heuristic value
+    //Not used in the paper
     private void earlyBackprop(List<Double> reward, ArrayList<MCTNode> pathInOrder) {
     	MCTNode currNode = null;
 
@@ -2252,7 +2099,9 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
+
     // Do MCTS backpropagation
+    // Since this is called at the end of a simulation, it also records heuristic data for later use
     private void backprop (List<Double> reward, ArrayList<MCTNode> pathInOrder, MCTNode terminalNode) {
     	MCTNode currNode = null;
     	Map<SymbolCountKey, SymbolCountGameData> gameData = new HashMap<SymbolCountKey, SymbolCountGameData>();
@@ -2351,13 +2200,10 @@ public class TestGamer extends StateMachineGamer
     		}
     		this.mobilityData.add(mobData);
     	}
-
-//    	if(this.recordNearestWin) {
-//
-//    	}
     }
 
 
+    //Counts symbols in a given state
     public Map<SymbolCountKey, Integer> getSymOccFromState(Set<List<Integer>> stateSet) {
     	Map<SymbolCountKey, Integer> symbolOccs;
     	if(this.symCountCache.containsKey(stateSet)) {
@@ -2386,10 +2232,11 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //Adds symbol count data from the given node to our symbol count heuristic data
+    //Also logs symbol count values by depth, so we can later determine which symbol counts are unaffected by player actions
     public void updateSymbolOccTrackers(Map<SymbolCountKey, SymbolCountGameData> gameData, MCTNode currNode) {
 		Set<List<Integer>> stateSet = currNode.getStateSet();
 		Map<SymbolCountKey, Integer> symbolOccs = getSymOccFromState(stateSet);
-//		System.out.println(targetStateToString(currNode.getStateSet()));
 
 		for(SymbolCountKey key : symbolOccs.keySet()) {
 			//Add any unique occurrence numbers to the global tracker
@@ -2408,7 +2255,8 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    public void updateSymbolCounts(Map<SymbolCountKey, SymbolCountGameData> gameData, Map<SymbolCountKey, Integer> symbolOccs) {
+    //Update the our multiple-game symbol count data (gameData) with data from one new game (symbolOccs)
+    private void updateSymbolCounts(Map<SymbolCountKey, SymbolCountGameData> gameData, Map<SymbolCountKey, Integer> symbolOccs) {
     	for(SymbolCountKey key : symbolOccs.keySet()) {
 			if(!gameData.containsKey(key)) {
 				gameData.put(key, new SymbolCountGameData());
@@ -2755,14 +2603,25 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    //Read heuristic parameters from file into our instance variables for this agent
+    //This method (and the one immediately below) are described in Section 3.2 of the paper
     public void loadHeuristicFile() {
     	String inFileName = MCT_READ_DIR + "/" + HEUR_FILE_NAME;
-    	Scanner s = null;
     	this.loadedSCRegression = new ArrayList<LoadedSCRegContainer>();
     	this.loadedMobRegression = new ArrayList<RegressionRecord>();
     	this.loadedNWRegression = new ArrayList<RegressionRecord>();
     	this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
     	this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+    	loadHeuristicFile(inFileName, this.sMap, this.loadedSCRegression, this.loadedMobRegression, this.loadedNWRegression, this.genHistoryData, this.historyData);
+    	this.heuristicsReady = true;
+    }
+
+    //Reads in heuristic parameters from the specified file, and loads them into the various lists passed as parameters
+    //Each list contains one entry corresponding to each role in the game
+    //Note: IDs loaded from file WILL be replaced with their corresponding IDs in the target game
+    public static void loadHeuristicFile(String inFileName, StateMapping sMap, List<LoadedSCRegContainer> loadedSCRegression, List<RegressionRecord> loadedMobRegression,
+    		List<RegressionRecord> loadedNWRegression, List<Map<Integer, HistoryData>> genHistoryData, List<Map<List<Integer>, HistoryData>> historyData) {
+    	Scanner s = null;
 
         try {
             s = new Scanner(new BufferedReader(new FileReader(inFileName), RuleGraphRecord.BUFFER_SIZE));
@@ -2793,8 +2652,8 @@ public class TestGamer extends StateMachineGamer
                 			double avgR = Double.parseDouble(tok.nextToken());
                 			newSC.avgR = avgR;
                 			while(tok.hasMoreTokens()) {
-                				int mainSym = this.sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
-                				int parentSym = this.sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                				int mainSym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                				int parentSym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
                 				int posn = Integer.parseInt(tok.nextToken());
                 				double slope = Double.parseDouble(tok.nextToken());
                 				double intercept = Double.parseDouble(tok.nextToken());
@@ -2808,7 +2667,7 @@ public class TestGamer extends StateMachineGamer
                 				}
                 			}
                 		}
-                		this.loadedSCRegression.add(newSC);
+                		loadedSCRegression.add(newSC);
 
                 	} else if(lineNumber < lineNumberBound[2]) { //mobility data
                 		if(tok.hasMoreTokens()) {
@@ -2817,7 +2676,7 @@ public class TestGamer extends StateMachineGamer
             				double numPoints = Double.parseDouble(tok.nextToken());
             				double r = Double.parseDouble(tok.nextToken());
             				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
-            				this.loadedMobRegression.add(currReg);
+            				loadedMobRegression.add(currReg);
                 		}
                 	} else if(lineNumber < lineNumberBound[3]) { //nearest win data
                 		if(tok.hasMoreTokens()) {
@@ -2826,12 +2685,12 @@ public class TestGamer extends StateMachineGamer
             				double numPoints = Double.parseDouble(tok.nextToken());
             				double r = Double.parseDouble(tok.nextToken());
             				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
-            				this.loadedNWRegression.add(currReg);
+            				loadedNWRegression.add(currReg);
                 		}
                 	} else if(lineNumber < lineNumberBound[4]) { //general history data
                 		Map<Integer, HistoryData> newGenHist = new HashMap<Integer, HistoryData>();
                 		while(tok.hasMoreTokens()) {
-                			int id = this.sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			int id = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
                 			int totalReward = Integer.parseInt(tok.nextToken());
                 			int numWins = Integer.parseInt(tok.nextToken());
                 			int numLosses = Integer.parseInt(tok.nextToken());
@@ -2848,7 +2707,7 @@ public class TestGamer extends StateMachineGamer
 	                			newGenHist.put(id, currData);
                 			}
                 		}
-                		this.genHistoryData.add(newGenHist);
+                		genHistoryData.add(newGenHist);
                 	} else { //specific history data
                 		Map<List<Integer>, HistoryData> newSpecHist = new HashMap<List<Integer>, HistoryData>();
                 		while(tok.hasMoreTokens()) {
@@ -2856,7 +2715,7 @@ public class TestGamer extends StateMachineGamer
                 			List<Integer> moveList = new ArrayList<Integer>();
                 			boolean mapSuccessful = true;
                 			for(int i=0;i<moveSize;i++) {
-                				int currMoveVal = this.sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                				int currMoveVal = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
                 				moveList.add(currMoveVal);
                 				if(currMoveVal == -1) {
                 					mapSuccessful = false;
@@ -2878,12 +2737,11 @@ public class TestGamer extends StateMachineGamer
 	                			newSpecHist.put(moveList, currData);
                 			}
                 		}
-                		this.historyData.add(newSpecHist);
+                		historyData.add(newSpecHist);
                 	}
                 }
                 lineNumber++;
             }
-            this.heuristicsReady = true;
         } catch (FileNotFoundException e) {
             System.out.println("ERROR loading states from file");
             System.out.println(e);
@@ -2894,6 +2752,142 @@ public class TestGamer extends StateMachineGamer
         }
     }
 
+
+    //Reads in heuristic parameters from the specified file, and loads them into the various lists passed as parameters
+    //Each list contains one entry corresponding to each role in the game
+    //Note: IDs loaded from file WILL NOT be replaced with their corresponding IDs in the target game
+    public static void loadHeuristicFileNoMap(String inFileName, List<LoadedSCRegContainer> loadedSCRegression, List<RegressionRecord> loadedMobRegression,
+    		List<RegressionRecord> loadedNWRegression, List<Map<Integer, HistoryData>> genHistoryData, List<Map<List<Integer>, HistoryData>> historyData) {
+    	Scanner s = null;
+
+        try {
+            s = new Scanner(new BufferedReader(new FileReader(inFileName), RuleGraphRecord.BUFFER_SIZE));
+            int lineNumber = 0;
+            int numPlayers = 0;
+            int[] lineNumberBound = new int[5];
+            lineNumberBound[0] = 1; //unique line(s) at top of file
+
+            while (s.hasNext()) {
+                String line = s.nextLine();
+                if(line.length() > 0) {
+                	StringTokenizer tok = new StringTokenizer(line);
+
+                	if(lineNumber < lineNumberBound[0]) { //unique line(s) at top of file
+                		numPlayers = Integer.parseInt(tok.nextToken());
+                		lineNumberBound[1] = lineNumberBound[0] + numPlayers;
+                        lineNumberBound[2] = lineNumberBound[1] + numPlayers;
+                        lineNumberBound[3] = lineNumberBound[2] + numPlayers;
+                        lineNumberBound[4] = lineNumberBound[3] + numPlayers;
+
+                	} else if(lineNumber < lineNumberBound[1]) { //symbol count data
+//                		int roleIndex = lineNumber - lineNumberBound[0];
+                		LoadedSCRegContainer newSC = new LoadedSCRegContainer();
+                		if(tok.hasMoreTokens()) {
+                			double avgR = Double.parseDouble(tok.nextToken());
+                			newSC.avgR = avgR;
+                			while(tok.hasMoreTokens()) {
+                				int mainSym = Integer.parseInt(tok.nextToken());
+                				int parentSym = Integer.parseInt(tok.nextToken());
+                				int posn = Integer.parseInt(tok.nextToken());
+                				double slope = Double.parseDouble(tok.nextToken());
+                				double intercept = Double.parseDouble(tok.nextToken());
+                				double numPoints = Double.parseDouble(tok.nextToken());
+                				double r = Double.parseDouble(tok.nextToken());
+                				tok.nextToken(); //throw away *
+                				if(mainSym != -1 && parentSym != -1) {
+	                				SymbolCountKey currKey = new SymbolCountKey(mainSym, parentSym, posn);
+	                				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	                				newSC.regMap.put(currKey, currReg);
+                				}
+                			}
+                		}
+                		loadedSCRegression.add(newSC);
+
+                	} else if(lineNumber < lineNumberBound[2]) { //mobility data
+                		if(tok.hasMoreTokens()) {
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+            				loadedMobRegression.add(currReg);
+                		}
+                	} else if(lineNumber < lineNumberBound[3]) { //nearest win data
+                		if(tok.hasMoreTokens()) {
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+            				loadedNWRegression.add(currReg);
+                		}
+                	} else if(lineNumber < lineNumberBound[4]) { //general history data
+                		Map<Integer, HistoryData> newGenHist = new HashMap<Integer, HistoryData>();
+                		while(tok.hasMoreTokens()) {
+                			int id = Integer.parseInt(tok.nextToken());
+                			int totalReward = Integer.parseInt(tok.nextToken());
+                			int numWins = Integer.parseInt(tok.nextToken());
+                			int numLosses = Integer.parseInt(tok.nextToken());
+                			int numOther = Integer.parseInt(tok.nextToken());
+                			int numOccs = Integer.parseInt(tok.nextToken());
+                			tok.nextToken(); //throw away *
+                			if(id != -1) {
+	                			HistoryData currData = new HistoryData();
+	                			currData.totalReward = totalReward;
+	                			currData.numWins = numWins;
+	                			currData.numLosses = numLosses;
+	                			currData.numOther = numOther;
+	                			currData.numOccs = numOccs;
+	                			newGenHist.put(id, currData);
+                			}
+                		}
+                		genHistoryData.add(newGenHist);
+                	} else { //specific history data
+                		Map<List<Integer>, HistoryData> newSpecHist = new HashMap<List<Integer>, HistoryData>();
+                		while(tok.hasMoreTokens()) {
+                			int moveSize = Integer.parseInt(tok.nextToken());
+                			List<Integer> moveList = new ArrayList<Integer>();
+                			boolean mapSuccessful = true;
+                			for(int i=0;i<moveSize;i++) {
+                				int currMoveVal = Integer.parseInt(tok.nextToken());
+                				moveList.add(currMoveVal);
+                				if(currMoveVal == -1) {
+                					mapSuccessful = false;
+                				}
+                			}
+                			int totalReward = Integer.parseInt(tok.nextToken());
+                			int numWins = Integer.parseInt(tok.nextToken());
+                			int numLosses = Integer.parseInt(tok.nextToken());
+                			int numOther = Integer.parseInt(tok.nextToken());
+                			int numOccs = Integer.parseInt(tok.nextToken());
+                			tok.nextToken(); //throw away *
+                			if(mapSuccessful) {
+	                			HistoryData currData = new HistoryData();
+	                			currData.totalReward = totalReward;
+	                			currData.numWins = numWins;
+	                			currData.numLosses = numLosses;
+	                			currData.numOther = numOther;
+	                			currData.numOccs = numOccs;
+	                			newSpecHist.put(moveList, currData);
+                			}
+                		}
+                		historyData.add(newSpecHist);
+                	}
+                }
+                lineNumber++;
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("ERROR loading states from file");
+            System.out.println(e);
+        } finally {
+            if (s != null) {
+                s.close();
+            }
+        }
+    }
+
+
+    //Remainder of the file specifies classes that are used as data containers for the various general heuristics
 
     public static class SymbolCountKey {
     	public int mainSym;
@@ -3064,7 +3058,6 @@ public class TestGamer extends StateMachineGamer
     	public Map<SymbolCountKey, SimpleRegression> regMap = new HashMap<SymbolCountKey, SimpleRegression>();
     	public Map<SymbolCountKey, Integer> occMap = new HashMap<SymbolCountKey, Integer>();
     	public double avgR = 0;
-//    	public double totalR = 0;
     	public int totalOcc = 0;
 
     	public PredictionPackage combinedPredict(Map<SymbolCountKey, Integer> symCounts) {
@@ -3136,50 +3129,4 @@ public class TestGamer extends StateMachineGamer
     		this.maxR = maxR;
     	}
     }
-
-//    public static class GenHistoryRegressionContainer {
-//    	public Map<Integer, SimpleRegression> regMap = new HashMap<Integer, SimpleRegression>();
-////    	public Map<Integer, Integer> occMap = new HashMap<Integer, Integer>();
-//    	public double avgR = 0;
-////    	public int totalOcc = 0;
-//
-//    	public PredictionPackage combinedPredict(int moveID) {
-//    		double result = 0;
-//    		double maxR = 0;
-//    		double prediction = 0;
-//    		if(this.regMap.containsKey(moveID)) {
-//    			prediction = this.regMap.get(moveID).predict(1);
-//				if(prediction > MAX_REWARD_VALUE) {
-//					prediction = MAX_REWARD_VALUE;
-//				} else if(prediction < MIN_REWARD_VALUE) {
-//					prediction = MIN_REWARD_VALUE;
-//				}
-//				maxR = this.regMap.get(moveID).getR();
-//    		}
-//    		return new PredictionPackage(result, maxR);
-//    	}
-//    }
-//
-//    public static class SpecHistoryRegressionContainer {
-//    	public Map<List<Integer>, SimpleRegression> regMap = new HashMap<List<Integer>, SimpleRegression>();
-////    	public Map<List<Integer>, Integer> occMap = new HashMap<List<Integer>, Integer>();
-//    	public double avgR = 0;
-//    	public int totalOcc = 0;
-//
-//    	public PredictionPackage combinedPredict(List<Integer> moveList) {
-//    		double result = 0;
-//    		double maxR = 0;
-//    		double prediction = 0;
-//    		if(this.regMap.containsKey(moveList)) {
-//    			prediction = this.regMap.get(moveList).predict(1);
-//				if(prediction > MAX_REWARD_VALUE) {
-//					prediction = MAX_REWARD_VALUE;
-//				} else if(prediction < MIN_REWARD_VALUE) {
-//					prediction = MIN_REWARD_VALUE;
-//				}
-//				maxR = this.regMap.get(moveList).getR();
-//    		}
-//    		return new PredictionPackage(result, maxR);
-//    	}
-//    }
 }

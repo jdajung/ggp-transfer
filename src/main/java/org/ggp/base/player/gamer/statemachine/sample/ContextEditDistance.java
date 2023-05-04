@@ -1359,7 +1359,7 @@ public class ContextEditDistance {
 					}
 				}
 			}
-			System.out.println(g1BestNode.getBaseNode().getName() + " " + bestRawDistance);
+//			System.out.println(g1BestNode.getBaseNode().getName() + " " + bestRawDistance);
 			if(bestRawDistance > ContextEditDistance.BASE_CONTEXT_NODE_UNMATCHED_COST) { //all g2 matches are too poor; map g1Node to nothing
 				float unmatchedCost = g1BestNode.unmatchedCost();
 				totalCost += unmatchedCost;

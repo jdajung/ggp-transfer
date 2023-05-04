@@ -33,6 +33,10 @@ public class RegressionRecord {
 		return r;
 	}
 
+	public void setR(double r) {
+		this.r = r;
+	}
+
 	@Override
 	public String toString() {
 		return "y=" + slope + "*x+" + intercept + ", r=" + r;

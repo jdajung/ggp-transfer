@@ -19,12 +19,14 @@ import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SymbolCountKey;
 public class HeuristicDataLibrary {
 
 	public static String SAVE_FILE_NAME = "heuristic_data.txt";
-	public static String MCT_READ_DIR = "MCTs/reversi";
-	public static String HEUR_SAVE_DIR = "MCTs/reversi";
+	public static String MCT_READ_DIR = "MCTs/breakthrough_small";
+	public static String HEUR_SAVE_DIR = "MCTs/breakthrough_small";
 	public static int MAX_FILES = 1000;  //Number of MCT files to combine
 	public static Random rand = new Random(3769460674928934938L);
 
 
+	// This method is described by Section 3.2 of the paper
+	// It combines data saved during different game instances and saves the resulting heuristic parameters to another file
 	public static void main(String[] args) {
 //		LinkedList<ReducedMCTree> trees = new LinkedList<ReducedMCTree>();
 
@@ -112,7 +114,7 @@ public class HeuristicDataLibrary {
     		}
     	}
 
-    	System.out.println("Found " + (fileNum+1) + " MCT files.");
+    	System.out.println("Found " + fileNum + " MCT files.");
 
 
 //    	int treeNum = 1;
@@ -132,7 +134,7 @@ public class HeuristicDataLibrary {
 	}
 
 
-
+	//Perform write to file
 	public static void writeHeuristicFile(List<SCRegressionContainer> scRegression, List<SimpleRegression> mobRegression, List<SimpleRegression> nearestWinRegression,
 			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, String savePath) {
 		int numPlayers = scRegression.size();

@@ -99,6 +99,7 @@ public class MCTNode {
 		this.goals = null;
 		this.transferTerm = TRANSFER_TERM_SENTINEL;
 		this.transferDif = TRANSFER_TERM_SENTINEL;
+
 //		Set<GdlSentence> gdlTerminalFacts = machine.isTerminalAnswers(state);
 //		this.isTerminal = gdlTerminalFacts != null;
 //		if(this.isTerminal) {
