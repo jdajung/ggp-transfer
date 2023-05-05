@@ -209,7 +209,7 @@ public class TestGamer extends StateMachineGamer
 
 		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
 		this.INITIAL_HEUR_RECORD = (ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && !LOAD_HEUR_FILE;
-		this.USE_ALT_HIST_HEUR = this.RULE_GRAPH_FILE.equals("connect_four_debug.txt");
+		this.USE_ALT_HIST_HEUR = false;//this.RULE_GRAPH_FILE.equals("connect_four_debug.txt");
 //		System.out.println(params);
 	}
 
@@ -1854,10 +1854,18 @@ public class TestGamer extends StateMachineGamer
     	for(List<Move> moveCombo : currNode.getChildren().keySet()) { //consider each possible child node
     		MCTNode child = currNode.getChildren().get(moveCombo);
     		double currScore;
-    		if(SELECTION_HEURISTIC && this.heuristicsReady) {
-    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
-    		} else { //if selection guidance is disabled, just use regular UCB1
-    			currScore = ucb1Basic(child, turnIndex);
+    		if(child != null && child.isTerminal() && (child.getGoals().get(turnIndex) >= WIN_THRESH || child.getGoals().get(turnIndex) <= LOSE_THRESH)) {
+    			if(child.getGoals().get(turnIndex) >= WIN_THRESH) { //assume that an instant win will always be taken
+    				currScore = 1000000;
+    			} else { //assume that an instant loss will always be avoided
+    				currScore = 0;
+    			}
+    		} else {
+	    		if(SELECTION_HEURISTIC && this.heuristicsReady) {
+	    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
+	    		} else { //if selection guidance is disabled, just use regular UCB1
+	    			currScore = ucb1Basic(child, turnIndex);
+	    		}
     		}
 
     		if (currScore > bestScore) {
