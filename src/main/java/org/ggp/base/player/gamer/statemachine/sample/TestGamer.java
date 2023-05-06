@@ -138,7 +138,7 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
 
 	public static final double HEURISTIC_INITIAL = 1.0;//0.9;
-	public static final double HEURISTIC_DECAY = 0.99;//0.9;
+	public double HEURISTIC_DECAY = 0.99;//0.9;
 
 	public static final double FLOAT_THRESH = 0.00001;
 	public static final int WIN_THRESH = 80;
@@ -195,7 +195,8 @@ public class TestGamer extends StateMachineGamer
 	//This is a janky hack to set parameters that should be set in the constructor
 	//But the GGP library only allows default constructors, so whatever
 	public void initParams(List<?> params) {
-		this.NW_ENABLED = (Boolean)(params.get(0));
+		this.NW_ENABLED = false;
+		this.HEURISTIC_DECAY = (Double)(params.get(0));
 		this.SELECTION_HEURISTIC = (Boolean)(params.get(1));
 		this.ROLLOUT_ORDERING = (Boolean)(params.get(2));
 		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
@@ -3115,7 +3116,11 @@ public class TestGamer extends StateMachineGamer
     				totalWeight += currR;
     			}
     		}
-    		result = result / totalWeight;
+    		if(totalWeight > 0) {
+    			result = result / totalWeight;
+    		} else {
+    			result = 0;
+    		}
     		return new PredictionPackage(result, maxR);
     	}
 
