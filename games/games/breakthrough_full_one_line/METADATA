@@ -1,0 +1,7 @@
+{
+  "gameName": "Breakthrough One Line 8x8",  
+  "rulesheet": "breakthroughOneFull.kif",  
+  "stylesheet": "breakthroughOneFull.xsl",
+  "description": "breakthroughOneFull.txt",
+  "user_interface": "breakthroughOneFull.js"
+}
