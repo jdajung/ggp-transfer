@@ -1,0 +1,7 @@
+{
+  "gameName": "Breakthrough 2.5 Lines",  
+  "rulesheet": "breakthrough20pc.kif",  
+  "stylesheet": "breakthrough20pc.xsl",
+  "description": "breakthrough20pc.txt",
+  "user_interface": "breakthrough20pc.js"
+}
