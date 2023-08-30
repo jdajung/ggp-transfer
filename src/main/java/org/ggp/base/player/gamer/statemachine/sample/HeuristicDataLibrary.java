@@ -12,17 +12,20 @@ import java.util.Map;
 import java.util.Random;
 
 import org.apache.commons.math4.legacy.stat.regression.SimpleRegression;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.BoardRegContainer;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.HistoryData;
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.LoadedBoardRegContainer;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SCRegressionContainer;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.SymbolCountKey;
 
 public class HeuristicDataLibrary {
 
 	public static String SAVE_FILE_NAME = "heuristic_data.txt";
-	public static String MCT_READ_DIR = "MCTs/breakthrough_small";
-	public static String HEUR_SAVE_DIR = "MCTs/breakthrough_small";
+	public static String MCT_READ_DIR = "MCTs/connect_four";
+	public static String HEUR_SAVE_DIR = "MCTs/connect_four";
 	public static int MAX_FILES = 1000;  //Number of MCT files to combine
 	public static Random rand = new Random(3769460674928934938L);
+
 
 
 	// This method is described by Section 3.2 of the paper
@@ -50,7 +53,13 @@ public class HeuristicDataLibrary {
     	List<SimpleRegression> nearestWinRegression = new ArrayList<SimpleRegression>();
     	List<Map<List<Integer>, HistoryData>> historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
     	List<Map<Integer, HistoryData>> genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+    	List<BoardRegContainer> boardRegression = new ArrayList<BoardRegContainer>();
+    	List<LoadedBoardRegContainer> loadedBoardReg = new ArrayList<LoadedBoardRegContainer>();
     	int numPlayers = 0;
+    	int boardXLen = 0;
+    	int boardYLen = 0;
+    	int minPieceLine = 0;
+    	int maxPieceLine = 0;
 
     	int fileNum = 0;
     	for(String name : fileNames) {
@@ -62,12 +71,17 @@ public class HeuristicDataLibrary {
 
 	    		if(fileNum == 0) {
 		    		numPlayers = currTree.numPlayers;
+		    		boardXLen = currTree.boardXLen;
+		    		boardYLen = currTree.boardYLen;
+		    		minPieceLine = currTree.minPieceLine;
+		    		maxPieceLine = currTree.maxPieceLine;
 		        	for(int i=0; i<numPlayers; i++) {
 		        		scRegression.add(new SCRegressionContainer());
 		        		mobRegression.add(new SimpleRegression());
 		        		nearestWinRegression.add(new SimpleRegression());
 		        		historyData.add(new HashMap<List<Integer>, HistoryData>());
 		        		genHistoryData.add(new HashMap<Integer, HistoryData>());
+		        		boardRegression.add(new BoardRegContainer());
 		        	}
 	    		}
 
@@ -75,6 +89,7 @@ public class HeuristicDataLibrary {
 	    			TestGamer.doSCRegression(currTree.symCountData, null, i, scRegression.get(i));
 	    			TestGamer.doMobilityRegression(currTree.mobilityData, i, mobRegression.get(i));
 	    			TestGamer.doNearestWinRegression(currTree.getStates(), i, nearestWinRegression.get(i));
+	    			TestGamer.doBoardRegression(currTree.boardData, i, boardRegression.get(i));
 	    			Map<Integer, HistoryData> currGenHistory = currTree.genHistoryData.get(i);
 	    			for(int key : currGenHistory.keySet()) {
 	    				if(!genHistoryData.get(i).containsKey(key)) {
@@ -130,26 +145,40 @@ public class HeuristicDataLibrary {
 //    		treeNum++;
 //    	}
 
-    	writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, HEUR_SAVE_DIR + "/" + SAVE_FILE_NAME);
+    	for(int i=0;i<numPlayers;i++) {
+    		loadedBoardReg.add(new LoadedBoardRegContainer(boardRegression.get(i)));
+    	}
+    	writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, loadedBoardReg, minPieceLine, maxPieceLine, HEUR_SAVE_DIR + "/" + SAVE_FILE_NAME);
 	}
 
 
 	//Perform write to file
 	public static void writeHeuristicFile(List<SCRegressionContainer> scRegression, List<SimpleRegression> mobRegression, List<SimpleRegression> nearestWinRegression,
-			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, String savePath) {
+			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, List<LoadedBoardRegContainer> boardData, int minLine, int maxLine, String savePath) {
 		int numPlayers = scRegression.size();
-		String headerStr = "" + numPlayers;
+		String headerStr = "" + numPlayers + " " + minLine + " " + maxLine;
     	String[] scStr = new String[numPlayers];
     	String[] mobStr = new String[numPlayers];
     	String[] nwStr = new String[numPlayers];
     	String[] genHistStr = new String[numPlayers];
     	String[] specHistStr = new String[numPlayers];
+    	String[] centreStr = new String[numPlayers];
+    	String[] xSideStr = new String[numPlayers];
+    	String[] ySideStr = new String[numPlayers];
+    	String[] cornerStr = new String[numPlayers];
+    	List<String[]> lineStr = new ArrayList<String[]>();
+    	for(int lineIndex=0;lineIndex+minLine<=maxLine;lineIndex++) {
+    		lineStr.add(new String[numPlayers]);
+    	}
+
     	for(int i=0;i<numPlayers;i++) {
     		scStr[i] = "";
     		mobStr[i] = "";
     		nwStr[i] = "";
     		genHistStr[i] = "";
     		specHistStr[i] = "";
+    		centreStr[i] = "";
+    		//HERE
 
     		scStr[i] += scRegression.get(i).avgR + " ";
     		for(SymbolCountKey key : scRegression.get(i).regMap.keySet()) {
@@ -173,6 +202,8 @@ public class HeuristicDataLibrary {
     			}
     			specHistStr[i] += currData.totalReward + " " + currData.numWins + " " + currData.numLosses + " " + currData.numOther + " " + currData.numOccs + " * ";
     		}
+
+
     	}
 
 
@@ -198,6 +229,18 @@ public class HeuristicDataLibrary {
             }
             for(int i=0;i<numPlayers;i++) {
             	br.write(specHistStr[i] + "\n");
+            }
+            for(int i=0;i<numPlayers;i++) {
+            	br.write(centreStr[i] + "\n");
+            }
+            for(int i=0;i<numPlayers;i++) {
+            	br.write(xSideStr[i] + "\n");
+            }
+            for(int i=0;i<numPlayers;i++) {
+            	br.write(ySideStr[i] + "\n");
+            }
+            for(int i=0;i<numPlayers;i++) {
+            	br.write(cornerStr[i] + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();

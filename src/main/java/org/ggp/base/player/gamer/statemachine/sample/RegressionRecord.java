@@ -1,5 +1,7 @@
 package org.ggp.base.player.gamer.statemachine.sample;
 
+import org.apache.commons.math4.legacy.stat.regression.SimpleRegression;
+
 public class RegressionRecord {
 	private double slope;
 	private double intercept;
@@ -11,6 +13,13 @@ public class RegressionRecord {
 		this.intercept = intercept;
 		this.numEntries = numEntries;
 		this.r = r;
+	}
+
+	public RegressionRecord(SimpleRegression simple) {
+		this.slope = simple.getSlope();
+		this.intercept = simple.getIntercept();
+		this.numEntries = simple.getN();
+		this.r = simple.getR();
 	}
 
 	public double predict(double x) {

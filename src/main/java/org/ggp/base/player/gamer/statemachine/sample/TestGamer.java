@@ -78,22 +78,40 @@ public class TestGamer extends StateMachineGamer
 	private List<Integer> maxMobility;
 	private List<Integer> minMobility;
 	private MobilityData playedMobility;
+	private List<BoardData> boardData;
+	private BoardData playedBoardData;
+	private Map<Set<List<Integer>>, Board> boardCache;
 	private List<Map<List<Integer>, HistoryData>> historyData;
 	private List<Map<Integer, HistoryData>> genHistoryData;
 	private List<Set<List<Integer>>> playedMoves;
 	private Map<SymbolCountKey, List<SymbolCountHeurData>> compiledSCData;
 	private List<MobilityHeurData> compiledMobData;
 	private List<SCRegressionContainer> scRegression;
+	private List<BoardRegContainer> boardRegression;
 	private List<SimpleRegression> mobRegression;
 	private List<SimpleRegression> nearestWinRegression;
 	private List<LoadedSCRegContainer> loadedSCRegression;
+	private List<LoadedBoardRegContainer> loadedBoardRegression;
 	private List<RegressionRecord> loadedMobRegression;
 	private List<RegressionRecord> loadedNWRegression;
+	private int boardID;
+	private int xPos;
+	private int yPos;
+	private int piecePos;
+	private int xMin;
+	private int xMax;
+	private int yMin;
+	private int yMax;
+	private List<Integer> xPosChain;
+	private List<Integer> yPosChain;
+	private Map<Integer,Integer> xLookup; // keys are ID, values are chain position
+	private Map<Integer,Integer> yLookup;
 
 	private boolean recordSymOccs;
 	private boolean recordMobility;
 	private boolean recordNearestWin;
 	private boolean recordHistory;
+	private boolean recordBoardStuff;
 	private boolean heuristicsReady;
 
 	//These are initialization parameters explained in and set by AutoPlayer
@@ -136,6 +154,8 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_WEIGHT = 1.0;
 	public static final double TRANSFER_DECAY_PER_VISIT = 0.9;
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
+	public static final int MIN_PIECE_LINE = 2;
+	public static final int MAX_PIECE_LINE = 5;
 
 	public static final double HEURISTIC_INITIAL = 1.0;//0.9;
 	public double HEURISTIC_DECAY = 0.99;//0.9;
@@ -175,17 +195,35 @@ public class TestGamer extends StateMachineGamer
 		this.maxMobility = new ArrayList<Integer>();
 		this.minMobility = new ArrayList<Integer>();
 		this.playedMobility = new MobilityData();
+		this.boardData = new LinkedList<BoardData>();
+		this.playedBoardData = new BoardData();
+		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
 		this.scRegression = null;
+		this.boardRegression = null;
 		this.mobRegression = null;
 		this.nearestWinRegression = null;
 		this.loadedSCRegression = null;
+		this.loadedBoardRegression = null;
 		this.loadedMobRegression = null;
 		this.loadedNWRegression = null;
+		this.boardID = -1;
+		this.xPos = -1;
+		this.yPos = -1;
+		this.piecePos = -1;
+		this.xMin = Integer.MAX_VALUE;
+		this.xMax = 0;
+		this.yMin = Integer.MAX_VALUE;
+		this.yMax = 0;
+		this.xPosChain = null;
+		this.yPosChain = null;
+		this.xLookup = new HashMap<Integer,Integer>();
+		this.yLookup = new HashMap<Integer,Integer>();
+
 
 		this.USE_TRANSFER = false;
 		this.SAVE_RULE_GRAPH_TO_FILE = true;
@@ -556,26 +594,28 @@ public class TestGamer extends StateMachineGamer
 //	    	System.out.println("############## " + (endTime-startTime));
 	    	System.out.println(sMap.getEdit().mappedNamesToString());
 
-	    	//Load archived MCT data from file
-	    	if(USE_TRANSFER) {
-	    		this.sMap.loadSourceStatesFromFile(MCT_READ_DIR + "/" + "MCT_combined.txt");
-//	    		for(int i=0;i<this.allRoles.size();i++) {
-//		    		HashMap<List<Integer>, Pair<Double, Long>> specific = this.sMap.getSourceStates().getSpecificMoveTotalData(i);
-//		        	HashMap<Integer, Pair<Double, Long>> general = this.sMap.getSourceStates().getGeneralMoveTotalData(i);
-//		        	System.out.println("*********** General Data for " + i + " ***********");
-//		        	for(int genMove : general.keySet()) {
-//		        		Pair<Double, Long> genData = general.get(genMove);
-//		        		double value = (genData.getKey() / genData.getValue());
-//		        		System.out.println(this.sMap.getSourceName(genMove) + ": " + value);
-//		        	}
-//		        	System.out.println("*********** Specific Data for " + i + " ***********");
-//		        	for(List<Integer> specMove : specific.keySet()) {
-//		        		Pair<Double, Long> specificData = specific.get(specMove);
-//		        		double value = (specificData.getKey() / specificData.getValue());
-//		        		System.out.println(this.sMap.getSourceName(specMove) + ": " + value);
-//		        	}
-//    			}
-	    	}
+
+	    	//Load archived MCT data from file - not needed if we are only loading heuristics
+//	    	if(USE_TRANSFER) {
+//	    		this.sMap.loadSourceStatesFromFile(MCT_READ_DIR + "/" + "MCT_combined.txt");
+	    	//Everything below here was already commented
+////	    		for(int i=0;i<this.allRoles.size();i++) {
+////		    		HashMap<List<Integer>, Pair<Double, Long>> specific = this.sMap.getSourceStates().getSpecificMoveTotalData(i);
+////		        	HashMap<Integer, Pair<Double, Long>> general = this.sMap.getSourceStates().getGeneralMoveTotalData(i);
+////		        	System.out.println("*********** General Data for " + i + " ***********");
+////		        	for(int genMove : general.keySet()) {
+////		        		Pair<Double, Long> genData = general.get(genMove);
+////		        		double value = (genData.getKey() / genData.getValue());
+////		        		System.out.println(this.sMap.getSourceName(genMove) + ": " + value);
+////		        	}
+////		        	System.out.println("*********** Specific Data for " + i + " ***********");
+////		        	for(List<Integer> specMove : specific.keySet()) {
+////		        		Pair<Double, Long> specificData = specific.get(specMove);
+////		        		double value = (specificData.getKey() / specificData.getValue());
+////		        		System.out.println(this.sMap.getSourceName(specMove) + ": " + value);
+////		        	}
+////    			}
+//	    	}
 
 	    	//Load heuristic file
 	    	if(LOAD_HEUR_FILE) {
@@ -639,6 +679,152 @@ public class TestGamer extends StateMachineGamer
         	}
     	}
 
+
+    	//Find a board, if there is one
+    	if(LOAD_HEUR_FILE || INITIAL_HEUR_RECORD || SAVE_MCT_TO_FILE) {
+    		root.expandChildren();
+    		MCTNode child = root.getExpandedChild(root.getChildren().keySet().iterator().next(), this.existingNodes, SAVE_MCT_TO_FILE);
+    		Set<List<Integer>> childState = child.getStateSet();
+    		HashSet<Integer> numIds = this.sMap.getTarget().getShortNumIDs();
+    		List<Pair<Integer,List<Integer>>> numChains = this.sMap.getTarget().getShortNumIDChains();
+    		Map<Integer,List<Integer>> numChainMap = new HashMap<Integer,List<Integer>>();
+    		for(Pair<Integer,List<Integer>> pair : numChains) {
+    			numChainMap.put(pair.getKey(), pair.getValue());
+    		}
+
+//    		System.out.println("---------------------------------------- NUM CHAINS ----------------------------------------");
+//    		for(Pair<String,List<String>> pair : this.sMap.getTarget().getShortNumChains()) {
+//    			System.out.println(pair.getKey() + ": " + pair.getValue());
+//    		}
+
+//    		System.out.println("---------------------- STATE ------------------------");
+    		//List the numbers that appear in each state tuple position (after pos 0), and record a null if any non-number IDs show up
+    		HashMap<Integer, List<Set<Integer>>> possibleBoards = new HashMap<Integer, List<Set<Integer>>>();
+    		for(List<Integer> tuple : childState) {
+    			if(tuple.size() == 4) {
+    				if(!possibleBoards.containsKey(tuple.get(0))) {
+    					possibleBoards.put(tuple.get(0), new ArrayList<Set<Integer>>());
+    					for(int i=0;i<3;i++) {
+    						possibleBoards.get(tuple.get(0)).add(new HashSet<Integer>());
+    					}
+    				}
+
+    				for(int i=0;i<3;i++) {
+    					Set<Integer> posnList = possibleBoards.get(tuple.get(0)).get(i);
+    					if(posnList != null && numIds.contains(tuple.get(i+1))) {
+    						posnList.add(tuple.get(i+1));
+    					} else if(posnList != null) {
+    						possibleBoards.get(tuple.get(0)).set(i, null);
+    					}
+    				}
+    			}
+    		}
+
+    		//Find which possible successor functions IDs match to all of the numbers in each position
+    		for(int candBoard : possibleBoards.keySet()) {
+    			List<Set<Integer>> posnData = possibleBoards.get(candBoard);
+	    		List<Set<Integer>> numChainMembership = new ArrayList<Set<Integer>>();
+	    		for(int i=0;i<3;i++) {
+	    			Set<Integer> possibleChainIds = new HashSet<Integer>();
+	    			if(posnData.get(i) != null) {
+	    				Iterator<Integer> numIter = posnData.get(i).iterator();
+	    				boolean first = true;
+	    				while(numIter.hasNext()) {
+	    					int currNum = numIter.next();
+	    					if(first) {
+	    						for(Pair<Integer,List<Integer>> candChain : numChains) {
+	    	    					if(candChain.getValue().contains(currNum)) {
+	    	    						possibleChainIds.add(candChain.getKey());
+	    	    					}
+	    	    				}
+	    					} else {
+	    						List<Integer> removeChainIds = new LinkedList<Integer>();
+	    						for(int chainId : possibleChainIds) {
+	    							if(!numChainMap.get(chainId).contains(currNum)) {
+	    								removeChainIds.add(chainId);
+	    							}
+	    						}
+	    						for(int removeId : removeChainIds) {
+	    							possibleChainIds.remove(removeId);
+	    						}
+	    					}
+	    					first = false;
+	    				}
+	    			}
+	    			numChainMembership.add(possibleChainIds);
+	    		}
+
+	    		//To determine which positions to use as coordinates, see which numbers belong to the longest chains
+	    		List<Integer> longestChains = new ArrayList<Integer>();
+	    		List<Integer> longestChainIds = new ArrayList<Integer>();
+	    		for(int i=0;i<3;i++) {
+	    			longestChains.add(0);
+	    			longestChainIds.add(-1);
+	    			for(int chainId : numChainMembership.get(i)) {
+	    				if(numChainMap.get(chainId).size() > longestChains.get(i)) {
+	    					longestChains.set(i, numChainMap.get(chainId).size());
+	    					longestChainIds.set(i, chainId);
+	    				}
+	    			}
+	    		}
+//	    		System.out.println("------------------------");
+//	    		System.out.println(longestChains);
+	    		int numDuds = 0;
+	    		for(int length : longestChains) {
+	    			if(length <= 0) {
+	    				numDuds++;
+	    			}
+	    		}
+	    		if(numDuds <= 1) {
+	    			if(longestChains.get(0) < longestChains.get(1) && longestChains.get(0) < longestChains.get(2)) {
+	    				xPos = 1;
+	    				yPos = 2;
+	    				piecePos = 0;
+	    				xPosChain = numChainMap.get(longestChainIds.get(1));
+	    				yPosChain = numChainMap.get(longestChainIds.get(2));
+	    			} else if(longestChains.get(1) < longestChains.get(0) && longestChains.get(1) < longestChains.get(2)) {
+	    				xPos = 0;
+	    				yPos = 2;
+	    				piecePos = 1;
+	    				xPosChain = numChainMap.get(longestChainIds.get(0));
+	    				yPosChain = numChainMap.get(longestChainIds.get(2));
+	    			} else {
+	    				xPos = 0;
+	    				yPos = 1;
+	    				piecePos = 2;
+	    				xPosChain = numChainMap.get(longestChainIds.get(0));
+	    				yPosChain = numChainMap.get(longestChainIds.get(1));
+	    			}
+	    			boardID = candBoard;
+
+	    			for(List<Integer> tuple : childState) {
+	    				if(tuple.get(0) == boardID) {
+		    				int xCoord = xLookup(tuple.get(xPos+1));
+		    				int yCoord = yLookup(tuple.get(yPos+1));
+		    				if(xCoord > xMax) {
+		    					xMax = xCoord;
+		    				}
+		    				if(xCoord < xMin) {
+		    					xMin = xCoord;
+		    				}
+		    				if(yCoord > yMax) {
+		    					yMax = yCoord;
+		    				}
+		    				if(yCoord < yMin) {
+		    					yMin = yCoord;
+		    				}
+	    				}
+	    			}
+	    			break;
+	    		}
+    		}
+
+    		System.out.println("-------------BOARD-----------------");
+    		System.out.println("Board ID: " + boardID + ", x-pos=" + xPos + ", y-pos=" + yPos + ", piece-pos=" + piecePos + ", x-min=" + xMin + ", x-max=" + xMax + ", y-min=" + yMin + ", y-max=" + yMax);
+    	}
+
+
+
     	//If we're saving the MCT data, keep a pointer to the original root to prevent garbage collection from deleting everything
     	if(SAVE_MCT_TO_FILE) {
     		origRoot = root;
@@ -649,11 +835,13 @@ public class TestGamer extends StateMachineGamer
 	    	recordMobility = true;
 	    	recordNearestWin = true;
 	    	recordHistory = true;
+	    	recordBoardStuff = true;
     	} else {
     		recordSymOccs = false;
 	    	recordMobility = false;
 	    	recordNearestWin = true;
 	    	recordHistory = false;
+	    	recordBoardStuff = false;
     	}
 
     	startTime = System.currentTimeMillis();
@@ -669,6 +857,7 @@ public class TestGamer extends StateMachineGamer
 	    	this.recordSymOccs = false;
 	    	this.recordMobility = false;
 	    	this.recordHistory = false;
+	    	this.recordBoardStuff = false;
 	    	System.out.println(heurTimeEnd - heurTimeStart);
 	    	System.out.println("SC: " + this.scRegression.get(roleIndex).toNameString(this.sMap));
 	    	System.out.println("Mobility: " + this.mobRegression.get(roleIndex).getR());
@@ -680,6 +869,9 @@ public class TestGamer extends StateMachineGamer
 	    	System.out.println();
     	}
     }
+
+
+
 
 
     //This method is called once per move. It does MCTS for as long as possible, then produces the best move to play
@@ -705,6 +897,9 @@ public class TestGamer extends StateMachineGamer
     			this.playedMobility.totalMobPerPlayer.set(turnIndex, this.playedMobility.totalMobPerPlayer.get(turnIndex) + mobValue);
     			this.playedMobility.numEntriesPerPlayer.set(turnIndex, this.playedMobility.numEntriesPerPlayer.get(turnIndex) + 1);
     		}
+    		if(this.recordBoardStuff) {
+    			updateBoardData(this.playedBoardData, root.getStateSet());
+    		}
     		if(this.recordHistory) {
     			List<List<Integer>> convertedMove = this.sMap.convertMoveToList(lastMove);
     			for(int i=0;i<convertedMove.size();i++) {
@@ -718,6 +913,15 @@ public class TestGamer extends StateMachineGamer
 
     	if(SAVE_EXPERIMENT) {
     		this.stateHistory.addLast(root.getStateSet());
+    	}
+
+    	//Debug printing for board heuristics
+    	if(this.boardID > 0) {
+    		System.out.println("-------------BOARD-----------------");
+    		System.out.println("Board ID: " + boardID + ", x-pos=" + xPos + ", y-pos=" + yPos + ", piece-pos=" + piecePos + ", x-min=" + xMin + ", x-max=" + xMax + ", y-min=" + yMin + ", y-max=" + yMax);
+    		Board currBoard = this.cacheBoard(this.root.getStateSet());
+    		System.out.println(currBoard.gridToString());
+    		System.out.println(currBoard.getHeur().toString());
     	}
 
     	//now continue building the MCT
@@ -847,6 +1051,118 @@ public class TestGamer extends StateMachineGamer
     }
 
 
+    private float sqrDistToBoardCentre(int x, int y) {
+    	float centreX = (this.xMax - this.xMin)/2.0f;
+    	float centreY = (this.yMax - this.yMin)/2.0f;
+    	float xDif = centreX - x;
+    	float yDif = centreY - y;
+    	return xDif*xDif + yDif*yDif;
+    }
+
+    private float sqrDistToXSide(int x) {
+    	int leftDist = x - this.xMin;
+    	int rightDist = this.xMax - x;
+    	return Math.min(leftDist*leftDist, rightDist*rightDist);
+    }
+
+    private float sqrDistToYSide(int y) {
+    	int botDist = y - this.yMin;
+    	int topDist = this.yMax - y;
+    	return Math.min(botDist*botDist, topDist*topDist);
+    }
+
+    private float sqrDistToCorner(int x, int y) {
+    	float corner1Dist = (x - this.xMin)*(x - this.xMin) + (y - this.yMin)*(y - this.yMin);
+    	float corner2Dist = (x - this.xMin)*(x - this.xMin) + (this.yMax - y)*(this.yMax - y);
+    	float corner3Dist = (this.xMax - x)*(this.xMax - x) + (this.yMax - y)*(this.yMax - y);
+    	float corner4Dist = (this.xMax - x)*(this.xMax - x) + (y - this.yMin)*(y - this.yMin);
+    	return Math.min(Math.min(corner1Dist, corner2Dist), Math.min(corner3Dist, corner4Dist));
+    }
+
+    private int countPieceLines(int pieceID, int minLength, int[][] board) {
+    	int count = 0;
+    	int[] xOffset = {1,1,0,1};
+    	int[] yOffset = {0,1,1,-1};
+    	boolean[][][] checked = new boolean[xOffset.length][board.length][board[0].length];
+    	for(int angle=0;angle<xOffset.length;angle++) {
+    		for(int x=0;x<board.length;x++) {
+    			int y=0;
+    			if(yOffset[angle] < 0) {
+    				y = board[x].length - 1;
+    			}
+    			while(y>=0 && y<board[x].length) {
+    				if(!checked[angle][x][y]) {
+    					boolean done = false;
+//    					List<Pair<Integer,Integer>> visited = new LinkedList<Pair<Integer,Integer>>();
+    					int numVisited = 0;
+    					int currX = x;
+    					int currY = y;
+    					while(!done) {
+    						if(currX>=0 && currX<board.length && currY>=0 && currY<board[currX].length) {
+    							checked[angle][currX][currY] = true;
+    							if(board[currX][currY] == pieceID) {
+//    								visited.add(new Pair<Integer,Integer>(currX,currY));
+    								numVisited ++;
+    								currX += xOffset[angle];
+    								currY += yOffset[angle];
+    							} else {
+    								done = true;
+    							}
+    						} else {
+    							done = true;
+    						}
+    					}
+    					if(numVisited >= minLength) {
+    						count++;
+    					}
+    				}
+    				if(yOffset[angle] < 0) {
+    					y--;
+    				} else {
+    					y++;
+    				}
+    			}
+    		}
+    	}
+    	return count;
+    }
+
+
+
+    // turn a state tuple into an array of the form [x-pos,y-pos,sym-id] if the tuple refers to a board square
+    // return null, otherwise
+    // does not check if a board was found
+    private int[] tupleToBoardPosn(List<Integer> tuple) {
+    	int[] result = null;
+    	if(tuple.get(0) == this.boardID) {
+    		int x = xLookup(tuple.get(this.xPos+1));
+    		int y = yLookup(tuple.get(this.yPos+1));
+    		int sym = tuple.get(piecePos+1);
+    		result = new int[]{x, y, sym};
+    	}
+    	return result;
+    }
+
+
+    private int chainLookup(int elementId, Map<Integer,Integer> table, List<Integer> chain) {
+    	if(!table.containsKey(elementId)) {
+    		table.put(elementId, chain.indexOf(elementId));
+    	}
+    	return table.get(elementId);
+    }
+
+
+    private int xLookup(int elementId) {
+    	return chainLookup(elementId, this.xLookup, this.xPosChain);
+    }
+
+    //
+    private int yLookup(int elementId) {
+    	return chainLookup(elementId, this.yLookup, this.yPosChain);
+    }
+
+
+
     //If a predicted value falls outside of the range of possible reward values, clamp it to the boundary
     public static double clampRewardVal(double val) {
     	if(val < MIN_REWARD_VALUE) {
@@ -855,6 +1171,94 @@ public class TestGamer extends StateMachineGamer
     		return MAX_REWARD_VALUE;
     	} else {
     		return val;
+    	}
+    }
+
+
+
+    public Board boardFromState(Set<List<Integer>> state) {
+    	int[][] board = null;
+    	Set<Integer> uniqueSyms = null;
+    	int xLength = -1;
+    	int yLength = -1;
+    	boolean startOver = true;
+    	while(startOver) {
+    		startOver = false;
+    		xLength = xMax - xMin + 1;
+    		yLength = yMax - yMin + 1;
+    		board = new int[xLength][yLength];
+    		uniqueSyms = new HashSet<Integer>();
+    		for(int i=0;i<board.length;i++) {
+    			Arrays.fill(board[i], -1);
+    		}
+    		for(List<Integer> tuple : state) {
+    			int[] boardPosn = tupleToBoardPosn(tuple);
+    			if(boardPosn != null) {
+	    			int xVal = boardPosn[0];
+	    			int yVal = boardPosn[1];
+	    			int sym = boardPosn[2];
+//	    			System.out.println("x:" + xVal + " y:" + yVal + " sym:" + this.sMap.getTargetName(sym));
+//	    			System.out.println("board x: " + xMin + " to " + xMax + " board y: " + yMin + " to " + yMax);
+	    			if(xVal >= xMin && xVal <= xMax && yVal >= yMin && yVal <= yMax) {
+	    				board[xVal-xMin][yVal-yMin] = sym;
+	    				uniqueSyms.add(sym);
+	    			} else {
+	    				if(xVal < xMin) {
+	    					xMin = xVal;
+	    				}
+	    				if(xVal > xMax) {
+	    					xMax = xVal;
+	    				}
+	    				if(yVal < yMin) {
+	    					yMin = yVal;
+	    				}
+	    				if(yVal > yMax) {
+	    					yMax = yVal;
+	    				}
+	    				startOver = true;
+	    				break;
+	    			}
+    			}
+    		}
+    	}
+    	return new Board(xLength, yLength, board, uniqueSyms);
+    }
+
+
+    private Board cacheBoard(Set<List<Integer>> state) {
+    	if(!this.boardCache.containsKey(state) || this.boardCache.get(state).xLength < this.xMax - this.xMin || this.boardCache.get(state).yLength < this.yMax - this.yMin) {
+    		Board board = boardFromState(state);
+    		this.boardCache.put(state, board);
+    	}
+    	return this.boardCache.get(state);
+    }
+
+
+
+    public void updateBoardData(BoardData data, Set<List<Integer>> state) {
+    	Board board = cacheBoard(state);
+    	BoardHeur heur = board.getHeur();
+
+    	for(int currSym : board.uniqueSyms) {
+    		if(!data.centreDistPerSym.containsKey(currSym)) {
+    			data.centreDistPerSym.put(currSym, 0f);
+        		data.xSideDistPerSym.put(currSym, 0f);
+        		data.ySideDistPerSym.put(currSym, 0f);
+        		data.cornerDistPerSym.put(currSym, 0f);
+        		data.divisorPerSym.put(currSym, 0);
+        		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+        			data.linesPerLengthPerSym.get(lineIndex).put(currSym, 0);
+        		}
+    		}
+    		data.centreDistPerSym.put(currSym, data.centreDistPerSym.get(currSym) + heur.centreAvg.get(currSym));
+    		data.xSideDistPerSym.put(currSym, data.xSideDistPerSym.get(currSym) + heur.xSideAvg.get(currSym));
+    		data.ySideDistPerSym.put(currSym, data.ySideDistPerSym.get(currSym) + heur.ySideAvg.get(currSym));
+    		data.cornerDistPerSym.put(currSym, data.cornerDistPerSym.get(currSym) + heur.cornerAvg.get(currSym));
+    		data.divisorPerSym.put(currSym, data.divisorPerSym.get(currSym)+1);
+
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			data.linesPerLengthPerSym.get(lineIndex).put(currSym, data.linesPerLengthPerSym.get(lineIndex).get(currSym) + heur.lineCount.get(lineIndex).get(currSym));
+    		}
     	}
     }
 
@@ -889,6 +1293,37 @@ public class TestGamer extends StateMachineGamer
     	if(Double.isNaN(mobVal)) {
     		mobVal = 0.0;
     		mobWeight = 0.0;
+    	}
+
+    	double centreVal = 0;
+    	double centreWeight = 0;
+    	double xSideVal = 0;
+    	double xSideWeight = 0;
+    	double ySideVal = 0;
+    	double ySideWeight = 0;
+    	double cornerVal = 0;
+    	double cornerWeight = 0;
+    	ArrayList<Double> lineVals = new ArrayList<Double>();
+    	ArrayList<Double> lineWeights = new ArrayList<Double>();
+    	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    		lineVals.add(0.0);
+    		lineWeights.add(0.0);
+    	}
+    	if(this.boardID != -1) {
+//    		System.out.println(this.loadedBoardRegression.toString(this.sMap));
+	    	List<PredictionPackage> boardPredictions = this.loadedBoardRegression.get(roleIndex).combinedPredict(cacheBoard(node.getStateSet()));
+	    	centreVal = boardPredictions.get(0).prediction;
+	    	centreWeight = boardPredictions.get(0).maxR;
+	    	xSideVal = boardPredictions.get(1).prediction;
+	    	xSideWeight = boardPredictions.get(1).maxR;
+	    	ySideVal = boardPredictions.get(2).prediction;
+	    	ySideWeight = boardPredictions.get(2).maxR;
+	    	cornerVal = boardPredictions.get(3).prediction;
+	    	cornerWeight = boardPredictions.get(3).maxR;
+	    	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+	    		lineVals.set(lineIndex, boardPredictions.get(4 + lineIndex).prediction);
+	    		lineWeights.set(lineIndex, boardPredictions.get(4 + lineIndex).maxR);
+	    	}
     	}
 
     	double nearestWinVal = 0;
@@ -983,10 +1418,17 @@ public class TestGamer extends StateMachineGamer
 	    	}
     	}
 
-    	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight;
+    	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight + centreWeight + xSideWeight + ySideWeight + cornerWeight;
+    	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    		totalWeight += lineWeights.get(lineIndex);
+    	}
     	double result = 0;
     	if(totalWeight > 0) {
-    		result = (scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight) / totalWeight;
+    		result = scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight + centreVal*centreWeight + xSideVal*xSideWeight + ySideVal*ySideWeight + cornerVal*cornerWeight;
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			result += lineVals.get(lineIndex)*lineWeights.get(lineIndex);
+    		}
+    		result /= totalWeight;
     	}
 
     	if(verbose) {
@@ -997,6 +1439,13 @@ public class TestGamer extends StateMachineGamer
 	    	System.out.println("NW: " + nearestWinVal + " " + nearestWinWeight + " " + node.getNearestWin().get(roleIndex));
 	    	System.out.println("Gen Hist: " + genHistVal + " " + genHistWeight);
 	    	System.out.println("Spec Hist: " + specHistVal + " " + specHistWeight);
+	    	System.out.println("Centre: " + centreVal + " " + centreWeight);
+	    	System.out.println("X Side: " + xSideVal + " " + xSideWeight);
+	    	System.out.println("Y Side: " + ySideVal + " " + ySideWeight);
+	    	System.out.println("Corner: " + cornerVal + " " + cornerWeight);
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			System.out.println("Line Length " + (lineIndex+MIN_PIECE_LINE) + ": " + lineVals.get(lineIndex) + " " + lineWeights.get(lineIndex));
+    		}
 	    	System.out.println("");
     	}
 
@@ -1011,13 +1460,37 @@ public class TestGamer extends StateMachineGamer
     public void prepHeuristics() {
     	this.usefulSymKeys = trimUnchangingSyms();
     	this.scRegression = new ArrayList<SCRegressionContainer>();
+    	this.boardRegression = new ArrayList<BoardRegContainer>();
+    	this.loadedBoardRegression = new ArrayList<LoadedBoardRegContainer>();
     	this.mobRegression = new ArrayList<SimpleRegression>();
     	this.nearestWinRegression = new ArrayList<SimpleRegression>();
     	for(int i=0; i<this.allRoles.size(); i++) {
     		this.scRegression.add(doSCRegression(this.symCountData, this.usefulSymKeys, i));
     		this.mobRegression.add(doMobilityRegression(this.mobilityData, i));
     		this.nearestWinRegression.add(doNearestWinRegression(this.root, i));
+    		this.boardRegression.add(doBoardRegression(this.boardData, i));
+    		this.loadedBoardRegression.add(new LoadedBoardRegContainer(this.boardRegression.get(i)));
     	}
+
+    	//FOR TESTING - REMOVE THIS BLOCK
+//    	this.loadedBoardRegression.get(0).lineReg.get(1).put(2, new RegressionRecord(10,0,1000,0.5));
+//		this.loadedBoardRegression.get(0).lineReg.get(1).put(5, new RegressionRecord(-10,100,1000,-0.5));
+//		this.loadedBoardRegression.get(1).lineReg.get(1).put(5, new RegressionRecord(10,0,1000,0.5));
+//		this.loadedBoardRegression.get(1).lineReg.get(1).put(2, new RegressionRecord(-10,100,1000,-0.5));
+		//
+
+		for(int i=0; i<this.allRoles.size(); i++) {
+    		System.out.println("Role " + i + " Heuristics:");
+    		System.out.println(this.loadedBoardRegression.get(i).toString(this.sMap));
+    		if(this.MAX_PIECE_LINE >= 4) {
+	    		Map<Integer, RegressionRecord> fourLineRec = this.loadedBoardRegression.get(i).lineReg.get(2);
+	    		System.out.println("4-line predictions for 0, 1 lines:");
+	    		for(int sym : fourLineRec.keySet()) {
+	    			System.out.println("sym: " + this.sMap.getTargetName(sym) + " 0:" + fourLineRec.get(sym).predict(0) + " 1:" + fourLineRec.get(sym).predict(1));
+	    		}
+    		}
+    	}
+
     	this.heuristicsReady = true;
     }
 
@@ -1077,6 +1550,36 @@ public class TestGamer extends StateMachineGamer
     	container.avgR = sumR / totalWeight;
     	container.totalOcc = totalWeight;
 
+    	return container;
+    }
+
+
+    public static BoardRegContainer doBoardRegression(List<BoardData> bdData, int roleIndex) {
+    	return doBoardRegression(bdData, roleIndex, new BoardRegContainer());
+    }
+
+    public static BoardRegContainer doBoardRegression(List<BoardData> bdData, int roleIndex, BoardRegContainer container) {
+    	for(BoardData data : bdData) {
+    		int reward = data.finalReward.get(roleIndex);
+    		for(int currSym : data.centreDistPerSym.keySet()) {
+    			if(!container.centreDistReg.containsKey(currSym)) {
+    				container.centreDistReg.put(currSym, new SimpleRegression());
+    				container.xSideDistReg.put(currSym, new SimpleRegression());
+    				container.ySideDistReg.put(currSym, new SimpleRegression());
+    				container.cornerDistReg.put(currSym, new SimpleRegression());
+    				for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    					container.lineReg.get(lineIndex).put(currSym, new SimpleRegression());
+    				}
+    			}
+    			container.centreDistReg.get(currSym).addData(data.centreDistPerSym.get(currSym), reward);
+    			container.xSideDistReg.get(currSym).addData(data.xSideDistPerSym.get(currSym), reward);
+    			container.ySideDistReg.get(currSym).addData(data.ySideDistPerSym.get(currSym), reward);
+    			container.cornerDistReg.get(currSym).addData(data.cornerDistPerSym.get(currSym), reward);
+    			for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    				container.lineReg.get(lineIndex).get(currSym).addData(data.linesPerLengthPerSym.get(lineIndex).get(currSym), reward);
+    			}
+    		}
+    	}
     	return container;
     }
 
@@ -1485,12 +1988,15 @@ public class TestGamer extends StateMachineGamer
 			System.out.println("ERROR in saveMctToFile: MCT has not been initialized.");
 		}
 
-		LinkedList<MCTNode> q = queueNodes(numNodes);
 		int numRoles = this.allRoles.size();
+
+		System.out.println("1");
 
 		if(this.usefulSymKeys == null) {
 			this.usefulSymKeys = trimUnchangingSyms();
 		}
+
+		System.out.println("2");
 
 		String scMaxMinStr = "";
 		String symbolCountStr = "";
@@ -1517,6 +2023,8 @@ public class TestGamer extends StateMachineGamer
 		}
 		scMaxMinStr += "\n";
 		symbolCountStr += "\n";
+
+		System.out.println("3");
 
 		String mobilityStr = "";
 		for(MobilityData data : this.mobilityData) {
@@ -1596,10 +2104,12 @@ public class TestGamer extends StateMachineGamer
 			moveIDStr[i] = "";
 		}
 
-		if(!q.isEmpty()) {
-			headerStr += numRoles + "\n"; //At the top, print the number of players on a line by itself
-		}
+		headerStr += numRoles + "\n"; //At the top, print the number of players on a line by itself
 
+
+		//This block stores nodes from the MCT, including state information. Since moving to general heuristics, it is no longer needed, so we don't queue up any nodes.
+//		LinkedList<MCTNode> q = queueNodes(numNodes); //this line would queue up all nodes with at least 2 visits
+		LinkedList<MCTNode> q = new LinkedList<MCTNode>(); //this empty list contains no nodes.
 		while(!q.isEmpty()) {
 			MCTNode currMCTNode = q.pop();
 			outStr += count + " "; //assigns an ascending ID value to each node
@@ -1681,6 +2191,8 @@ public class TestGamer extends StateMachineGamer
 			}
 		}
 
+
+
 		//Record move data - 2 lines per role
 		String genMoveStr = "";
 		String specMoveStr = "";
@@ -1742,6 +2254,25 @@ public class TestGamer extends StateMachineGamer
 		}
 
 
+		//Board Heuristics
+		String boardInfoStr = "" + (this.xMax - this.xMin) + " " + (this.yMax - this.yMin) + " " + MIN_PIECE_LINE + " " + MAX_PIECE_LINE + "\n";
+		String boardStr = "";
+		for(BoardData data : this.boardData) {
+			for(int i=0;i<numRoles;i++) {
+				boardStr += data.finalReward.get(i) + " ";
+			}
+			for(int currSym : data.centreDistPerSym.keySet()) {
+				boardStr += currSym + " " + data.divisorPerSym.get(currSym) + " " + data.centreDistPerSym.get(currSym) + " " + data.xSideDistPerSym.get(currSym) + " " + data.ySideDistPerSym.get(currSym) + " " + data.cornerDistPerSym.get(currSym) + " ";
+				for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+					boardStr += data.linesPerLengthPerSym.get(lineIndex).get(currSym) + " ";
+				}
+				boardStr += "* ";
+			}
+			boardStr += "# ";
+		}
+
+
+
 		//Write data to file
 		File file = new File(outFileName);
         FileWriter fr = null;
@@ -1764,6 +2295,8 @@ public class TestGamer extends StateMachineGamer
             for(int i=0;i<numRoles;i++) {
             	br.write(specHistoryStr[i] + "\n");
             }
+            br.write(boardInfoStr);
+            br.write(boardStr + "\n");
             br.write(stateStr + "\n");
             br.write(outStr);
         } catch (IOException e) {
@@ -2115,12 +2648,14 @@ public class TestGamer extends StateMachineGamer
     	MCTNode currNode = null;
     	Map<SymbolCountKey, SymbolCountGameData> gameData = new HashMap<SymbolCountKey, SymbolCountGameData>();
     	MobilityData mobData = new MobilityData();
+    	BoardData bdData = new BoardData();
     	List<Integer> finalReward = terminalNode.getGoals();
     	boolean terminalStateSeen = this.seenTerminalStates.contains(terminalNode.getStateSet());
     	List<Boolean> terminalWin = new ArrayList<Boolean>();
     	List<Boolean> terminalLoss = new ArrayList<Boolean>();
     	int numPlayers = finalReward.size();
     	mobData.finalReward = finalReward;
+    	bdData.finalReward = finalReward;
     	for(int goal : finalReward) {
     		mobData.totalMobPerPlayer.add(0f);
     		mobData.numEntriesPerPlayer.add(0);
@@ -2166,6 +2701,10 @@ public class TestGamer extends StateMachineGamer
     			}
     		}
 
+    		if(this.recordBoardStuff && !terminalStateSeen) {
+    			this.updateBoardData(bdData, currNode.getStateSet());
+    		}
+
     		if(this.recordNearestWin) {
     			for(int j=0;j<numPlayers;j++) {
     				int dist = terminalNode.getDepth() - currNode.getDepth();
@@ -2208,6 +2747,11 @@ public class TestGamer extends StateMachineGamer
     			mobData.numEntriesPerPlayer.set(i, mobData.numEntriesPerPlayer.get(i) + this.playedMobility.numEntriesPerPlayer.get(i));
     		}
     		this.mobilityData.add(mobData);
+    	}
+
+    	if(this.recordBoardStuff && !terminalStateSeen) {
+    		bdData.addOtherBoardData(this.playedBoardData);
+    		this.boardData.add(bdData);
     	}
     }
 
@@ -2406,7 +2950,7 @@ public class TestGamer extends StateMachineGamer
         //if heuristics were generated during initialization, save them
         if(INITIAL_HEUR_RECORD) {
         	String savePath = EXPERIMENT_SAVE_DIR + "/heur_" + this.getRole() + "_" + historyFileName;
-        	HeuristicDataLibrary.writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, savePath);
+        	HeuristicDataLibrary.writeHeuristicFile(scRegression, mobRegression, nearestWinRegression, historyData, genHistoryData, loadedBoardRegression, MIN_PIECE_LINE, MAX_PIECE_LINE, savePath);
         }
     }
 
@@ -2548,17 +3092,34 @@ public class TestGamer extends StateMachineGamer
 		this.maxMobility = new ArrayList<Integer>();
 		this.minMobility = new ArrayList<Integer>();
 		this.playedMobility = new MobilityData();
+		this.boardData = new LinkedList<BoardData>();
+		this.playedBoardData = new BoardData();
+		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
 		this.scRegression = null;
+		this.boardRegression = null;
 		this.mobRegression = null;
 		this.nearestWinRegression = null;
 		this.loadedSCRegression = null;
+		this.loadedBoardRegression = null;
 		this.loadedMobRegression = null;
 		this.loadedNWRegression = null;
+		this.boardID = -1;
+		this.xPos = -1;
+		this.yPos = -1;
+		this.piecePos = -1;
+		this.xMin = Integer.MAX_VALUE;
+		this.xMax = 0;
+		this.yMin = Integer.MAX_VALUE;
+		this.yMax = 0;
+		this.xPosChain = null;
+		this.yPosChain = null;
+		this.xLookup = new HashMap<Integer,Integer>();
+		this.yLookup = new HashMap<Integer,Integer>();
 
 		System.out.println("All cleaned up.");
     }
@@ -2591,18 +3152,34 @@ public class TestGamer extends StateMachineGamer
 		this.maxMobility = new ArrayList<Integer>();
 		this.minMobility = new ArrayList<Integer>();
 		this.playedMobility = new MobilityData();
+		this.boardData = new LinkedList<BoardData>();
+		this.playedBoardData = new BoardData();
+		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
 		this.scRegression = null;
+		this.boardRegression = null;
 		this.mobRegression = null;
 		this.nearestWinRegression = null;
 		this.loadedSCRegression = null;
+		this.loadedBoardRegression = null;
 		this.loadedMobRegression = null;
 		this.loadedNWRegression = null;
-
+		this.boardID = -1;
+		this.xPos = -1;
+		this.yPos = -1;
+		this.piecePos = -1;
+		this.xMin = Integer.MAX_VALUE;
+		this.xMax = 0;
+		this.yMin = Integer.MAX_VALUE;
+		this.yMax = 0;
+		this.xPosChain = null;
+		this.yPosChain = null;
+		this.xLookup = new HashMap<Integer,Integer>();
+		this.yLookup = new HashMap<Integer,Integer>();
     }
 
 
@@ -2987,6 +3564,165 @@ public class TestGamer extends StateMachineGamer
     	}
     }
 
+    public static class BoardData {
+    	public Map<Integer, Float> centreDistPerSym;
+    	public Map<Integer, Float> cornerDistPerSym;
+    	public Map<Integer, Float> xSideDistPerSym;
+    	public Map<Integer, Float> ySideDistPerSym;
+    	public List<Map<Integer, Integer>> linesPerLengthPerSym;
+    	public Map<Integer, Integer> divisorPerSym;
+    	public int numEntries;
+    	public List<Integer> finalReward;
+
+    	public BoardData() {
+    		centreDistPerSym = new HashMap<Integer,Float>();
+        	cornerDistPerSym = new HashMap<Integer,Float>();
+        	xSideDistPerSym = new HashMap<Integer,Float>();
+        	ySideDistPerSym = new HashMap<Integer,Float>();
+        	linesPerLengthPerSym = new ArrayList<Map<Integer, Integer>>();
+        	divisorPerSym = new HashMap<Integer,Integer>();
+        	numEntries = 0;
+        	finalReward = Arrays.asList(-1, -1);
+        	for(int i=0;i<MAX_PIECE_LINE;i++) {
+    			linesPerLengthPerSym.add(new HashMap<Integer, Integer>());
+    		}
+    	}
+
+//    	public void lineInit() {
+//    		for(int i=0;i<MAX_PIECE_LINE;i++) {
+//    			linesPerLengthPerSym.add(new HashMap<Integer, Integer>());
+//    		}
+//    	}
+
+    	public void addOtherBoardData(BoardData other) {
+    		for(int currSym : other.divisorPerSym.keySet()) {
+    			if(!this.divisorPerSym.containsKey(currSym)) {
+    				this.centreDistPerSym.put(currSym, other.centreDistPerSym.get(currSym));
+    				this.xSideDistPerSym.put(currSym, other.xSideDistPerSym.get(currSym));
+    				this.ySideDistPerSym.put(currSym, other.ySideDistPerSym.get(currSym));
+    				this.cornerDistPerSym.put(currSym, other.cornerDistPerSym.get(currSym));
+    				this.divisorPerSym.put(currSym, other.divisorPerSym.get(currSym));
+    				for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    					this.linesPerLengthPerSym.get(lineIndex).put(currSym, other.linesPerLengthPerSym.get(lineIndex).get(currSym));
+    				}
+    			} else {
+    				this.centreDistPerSym.put(currSym, this.centreDistPerSym.get(currSym) + other.centreDistPerSym.get(currSym));
+    				this.xSideDistPerSym.put(currSym, this.xSideDistPerSym.get(currSym) + other.xSideDistPerSym.get(currSym));
+    				this.ySideDistPerSym.put(currSym, this.ySideDistPerSym.get(currSym) + other.ySideDistPerSym.get(currSym));
+    				this.cornerDistPerSym.put(currSym, this.cornerDistPerSym.get(currSym) + other.cornerDistPerSym.get(currSym));
+    				this.divisorPerSym.put(currSym, this.divisorPerSym.get(currSym) + other.divisorPerSym.get(currSym));
+    				for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    					this.linesPerLengthPerSym.get(lineIndex).put(currSym, this.linesPerLengthPerSym.get(lineIndex).get(currSym) + other.linesPerLengthPerSym.get(lineIndex).get(currSym));
+    				}
+    			}
+    		}
+    	}
+    }
+
+    public class Board{
+    	public int xLength;
+    	public int yLength;
+    	public int[][] grid;
+    	public Set<Integer> uniqueSyms;
+    	private BoardHeur heur;
+
+    	public Board(int xLength, int yLength, int[][] grid, Set<Integer> uniqueSyms) {
+    		this.xLength = xLength;
+    		this.yLength = yLength;
+    		this.grid = grid;
+    		this.uniqueSyms = uniqueSyms;
+    		this.heur = null;
+    	}
+
+    	public BoardHeur getHeur() {
+    		if(this.heur == null) {
+    			this.heur = new BoardHeur(this);
+    		}
+    		return this.heur;
+    	}
+
+    	public String gridToString() {
+    		String str = "";
+    		for(int y=grid[0].length-1;y>=0;y--) {
+    			for(int x=0;x<grid.length;x++) {
+    				if(grid[x][y] == -1) {
+    					str += "* ";
+    				} else {
+    					str += grid[x][y] + " ";
+    				}
+    			}
+    			if(y > 0) {
+    				str += "\n";
+    			}
+    		}
+    		return str;
+    	}
+    }
+
+    public class BoardHeur {
+    	public Map<Integer,Float> centreAvg = new HashMap<Integer,Float>();
+    	public Map<Integer,Float> xSideAvg = new HashMap<Integer,Float>();
+    	public Map<Integer,Float> ySideAvg = new HashMap<Integer,Float>();
+    	public Map<Integer,Float> cornerAvg = new HashMap<Integer,Float>();
+    	public List<Map<Integer,Integer>> lineCount = new LinkedList<Map<Integer,Integer>>();
+
+    	public BoardHeur(Board board) {
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			lineCount.add(new HashMap<Integer,Integer>());
+    		}
+    		Map<Integer,Float> centreDist = new HashMap<Integer,Float>();
+        	Map<Integer,Float> xSideDist = new HashMap<Integer,Float>();
+        	Map<Integer,Float> ySideDist = new HashMap<Integer,Float>();
+        	Map<Integer,Float> cornerDist = new HashMap<Integer,Float>();
+        	Map<Integer,Integer> numOcc = new HashMap<Integer,Integer>();
+        	for(int currSym : board.uniqueSyms) {
+        		centreDist.put(currSym, 0.0f);
+        		xSideDist.put(currSym, 0.0f);
+        		ySideDist.put(currSym, 0.0f);
+        		cornerDist.put(currSym, 0.0f);
+        		numOcc.put(currSym, 0);
+        	}
+        	for(int x=0;x<board.grid.length;x++) {
+        		for(int y=0;y<board.grid[x].length;y++) {
+        			int symAtPosn = board.grid[x][y];
+        			if(symAtPosn != -1) {
+        				centreDist.put(symAtPosn, centreDist.get(symAtPosn) + sqrDistToBoardCentre(x,y));
+        				xSideDist.put(symAtPosn, xSideDist.get(symAtPosn) + sqrDistToXSide(x));
+        				ySideDist.put(symAtPosn, ySideDist.get(symAtPosn) + sqrDistToYSide(y));
+        				cornerDist.put(symAtPosn, cornerDist.get(symAtPosn) + sqrDistToCorner(x,y));
+        				numOcc.put(symAtPosn,numOcc.get(symAtPosn) + 1);
+        			}
+        		}
+        	}
+        	for(int currSym : board.uniqueSyms) {
+        		this.centreAvg.put(currSym, centreDist.get(currSym) / ((float)numOcc.get(currSym)));
+        		this.xSideAvg.put(currSym, xSideDist.get(currSym) / ((float)numOcc.get(currSym)));
+        		this.ySideAvg.put(currSym, ySideDist.get(currSym) / ((float)numOcc.get(currSym)));
+        		this.cornerAvg.put(currSym, cornerDist.get(currSym) / ((float)numOcc.get(currSym)));
+        		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+        			int currLength = lineIndex+MIN_PIECE_LINE;
+        			int count = countPieceLines(currSym, currLength, board.grid);
+        			this.lineCount.get(lineIndex).put(currSym, count);
+        		}
+        	}
+    	}
+
+    	@Override
+		public String toString() {
+    		String str = "Board Heuristics\n";
+    		for(int sym : centreAvg.keySet()) {
+    			str += "Symbol: " + sMap.getTargetName(sym) + " - " + sym + "\n";
+    			str += "centre:" + centreAvg.get(sym) + " x-side:" + xSideAvg.get(sym) + " y-side:" + ySideAvg.get(sym) + " corner:" + cornerAvg.get(sym);
+    			for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    				int lineLen = lineIndex+MIN_PIECE_LINE;
+    				str += " " + lineLen + "-line:" + lineCount.get(lineIndex).get(sym);
+    			}
+    			str += "\n";
+    		}
+    		return str;
+    	}
+    }
+
     public static class HistoryData {
     	public int totalReward = 0;
     	public int numWins = 0;
@@ -3061,6 +3797,187 @@ public class TestGamer extends StateMachineGamer
     	public int numOther = 0;
     	public float maxValue = 0;
     	public float minValue = 0;
+    }
+
+    public static class BoardRegContainer {
+    	public Map<Integer, SimpleRegression> centreDistReg;
+    	public Map<Integer, SimpleRegression> xSideDistReg;
+    	public Map<Integer, SimpleRegression> ySideDistReg;
+    	public Map<Integer, SimpleRegression> cornerDistReg;
+    	public List<Map<Integer,SimpleRegression>> lineReg;
+
+    	public BoardRegContainer() {
+    		centreDistReg = new HashMap<Integer, SimpleRegression>();
+    		xSideDistReg = new HashMap<Integer, SimpleRegression>();
+    		ySideDistReg = new HashMap<Integer, SimpleRegression>();
+    		cornerDistReg = new HashMap<Integer, SimpleRegression>();
+    		lineReg = new ArrayList<Map<Integer,SimpleRegression>>();
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			lineReg.add(new HashMap<Integer, SimpleRegression>());
+    		}
+    	}
+    }
+
+    public static class LoadedBoardRegContainer {
+    	public Map<Integer, RegressionRecord> centreDistReg;
+    	public Map<Integer, RegressionRecord> xSideDistReg;
+    	public Map<Integer, RegressionRecord> ySideDistReg;
+    	public Map<Integer, RegressionRecord> cornerDistReg;
+    	public List<Map<Integer,RegressionRecord>> lineReg;
+
+    	public LoadedBoardRegContainer() {
+    		centreDistReg = new HashMap<Integer, RegressionRecord>();
+    		xSideDistReg = new HashMap<Integer, RegressionRecord>();
+    		ySideDistReg = new HashMap<Integer, RegressionRecord>();
+    		cornerDistReg = new HashMap<Integer, RegressionRecord>();
+    		lineReg = new ArrayList<Map<Integer,RegressionRecord>>();
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			lineReg.add(new HashMap<Integer, RegressionRecord>());
+    		}
+    	}
+
+    	public LoadedBoardRegContainer(BoardRegContainer brc) {
+    		this();
+    		for(int currSym : brc.centreDistReg.keySet()) {
+    			this.centreDistReg.put(currSym, new RegressionRecord(brc.centreDistReg.get(currSym)));
+    			this.xSideDistReg.put(currSym, new RegressionRecord(brc.xSideDistReg.get(currSym)));
+    			this.ySideDistReg.put(currSym, new RegressionRecord(brc.ySideDistReg.get(currSym)));
+    			this.cornerDistReg.put(currSym, new RegressionRecord(brc.cornerDistReg.get(currSym)));
+    			for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    				lineReg.get(lineIndex).put(currSym, new RegressionRecord(brc.lineReg.get(lineIndex).get(currSym)));
+    			}
+    		}
+    	}
+
+    	//Each position in the list contains a prediction package for the given Board:
+    	// 0 - centre
+    	// 1 - xSide
+    	// 2 - ySide
+    	// 3 - corner
+    	// 4 onward - line length from min to max length lines
+    	public List<PredictionPackage> combinedPredict(Board board) {
+    		List<PredictionPackage> result = new ArrayList<PredictionPackage>();
+    		BoardHeur heur = board.getHeur();
+    		double centrePrediction = 0;
+    		double centreTotalWeight = 0;
+    		double centreMaxR = 0;
+    		double xSidePrediction = 0;
+    		double xSideTotalWeight = 0;
+    		double xSideMaxR = 0;
+    		double ySidePrediction = 0;
+    		double ySideTotalWeight = 0;
+    		double ySideMaxR = 0;
+    		double cornerPrediction = 0;
+    		double cornerTotalWeight = 0;
+    		double cornerMaxR = 0;
+    		List<Double> linePrediction = new ArrayList<Double>();
+    		List<Double> lineTotalWeight = new ArrayList<Double>();
+    		List<Double> lineMaxR = new ArrayList<Double>();
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			linePrediction.add(0.0);
+    			lineTotalWeight.add(0.0);
+    			lineMaxR.add(0.0);
+    		}
+
+    		for(int sym : this.centreDistReg.keySet()) {
+    			if(board.uniqueSyms.contains(sym)) {
+	    			double currPred = clampRewardVal(this.centreDistReg.get(sym).predict(heur.centreAvg.get(sym)));
+	    			double currR = Math.abs(this.centreDistReg.get(sym).getR());
+	    			if(currR > centreMaxR) {
+						centreMaxR = currR;
+					}
+	    			centrePrediction += currPred * currR;
+	    			centreTotalWeight += currR;
+
+	    			currPred = clampRewardVal(this.xSideDistReg.get(sym).predict(heur.xSideAvg.get(sym)));
+	    			currR = Math.abs(this.xSideDistReg.get(sym).getR());
+	    			if(currR > xSideMaxR) {
+	    				xSideMaxR = currR;
+					}
+	    			xSidePrediction += currPred * currR;
+	    			xSideTotalWeight += currR;
+
+	    			currPred = clampRewardVal(this.ySideDistReg.get(sym).predict(heur.ySideAvg.get(sym)));
+	    			currR = Math.abs(this.ySideDistReg.get(sym).getR());
+	    			if(currR > ySideMaxR) {
+	    				ySideMaxR = currR;
+					}
+	    			ySidePrediction += currPred * currR;
+	    			ySideTotalWeight += currR;
+
+	    			currPred = clampRewardVal(this.cornerDistReg.get(sym).predict(heur.cornerAvg.get(sym)));
+	    			currR = Math.abs(this.cornerDistReg.get(sym).getR());
+	    			if(currR > cornerMaxR) {
+	    				cornerMaxR = currR;
+					}
+	    			cornerPrediction += currPred * currR;
+	    			cornerTotalWeight += currR;
+
+	    			for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+	    				currPred = clampRewardVal(this.lineReg.get(lineIndex).get(sym).predict(heur.lineCount.get(lineIndex).get(sym)));
+	        			currR = Math.abs(this.lineReg.get(lineIndex).get(sym).getR());
+	        			if(currR > lineMaxR.get(lineIndex)) {
+	        				lineMaxR.set(lineIndex, currR);
+	    				}
+	        			linePrediction.set(lineIndex, linePrediction.get(lineIndex) + currPred * currR);
+	        			lineTotalWeight.set(lineIndex, lineTotalWeight.get(lineIndex) + currR);
+	    			}
+    			}
+    		}
+
+    		if(centreTotalWeight > 0) {
+    			centrePrediction = centrePrediction / centreTotalWeight;
+    		} else {
+    			centrePrediction = 0;
+    		}
+    		if(xSideTotalWeight > 0) {
+    			xSidePrediction = xSidePrediction / xSideTotalWeight;
+    		} else {
+    			xSidePrediction = 0;
+    		}
+    		if(ySideTotalWeight > 0) {
+    			ySidePrediction = ySidePrediction / ySideTotalWeight;
+    		} else {
+    			ySidePrediction = 0;
+    		}
+    		if(cornerTotalWeight > 0) {
+    			cornerPrediction = cornerPrediction / cornerTotalWeight;
+    		} else {
+    			cornerPrediction = 0;
+    		}
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			if(lineTotalWeight.get(lineIndex) > 0) {
+    				linePrediction.set(lineIndex, linePrediction.get(lineIndex) / lineTotalWeight.get(lineIndex));
+        		} else {
+        			linePrediction.set(lineIndex, 0.0);
+        		}
+    		}
+
+    		result.add(new PredictionPackage(centrePrediction, centreMaxR));
+    		result.add(new PredictionPackage(xSidePrediction, xSideMaxR));
+    		result.add(new PredictionPackage(ySidePrediction, ySideMaxR));
+    		result.add(new PredictionPackage(cornerPrediction, cornerMaxR));
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			result.add(new PredictionPackage(linePrediction.get(lineIndex), lineMaxR.get(lineIndex)));
+    		}
+
+    		return result;
+    	}
+
+		public String toString(StateMapping sMap) {
+    		String str = "Board Regression\n";
+    		for(int sym : centreDistReg.keySet()) {
+    			str += "Symbol: " + sMap.getTargetName(sym) + " - " + sym + "\n";
+    			str += "centre: r=" + centreDistReg.get(sym).getR() + " m=" + centreDistReg.get(sym).getSlope() + " x-side: r=" + xSideDistReg.get(sym).getR() + " m=" + xSideDistReg.get(sym).getSlope()
+    					+ " y-side: r=" + ySideDistReg.get(sym).getR() + " m=" + ySideDistReg.get(sym).getSlope() + " corner: r=" + cornerDistReg.get(sym).getR() + " m=" + cornerDistReg.get(sym).getSlope();
+    			for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    				int lineLen = lineIndex+MIN_PIECE_LINE;
+    				str += " " + lineLen + "-line: r=" + lineReg.get(lineIndex).get(sym).getR() + " m=" + lineReg.get(lineIndex).get(sym).getSlope();
+    			}
+    			str += "\n";
+    		}
+    		return str;
+    	}
     }
 
     public static class SCRegressionContainer {

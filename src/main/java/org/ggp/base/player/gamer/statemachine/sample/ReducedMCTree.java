@@ -17,6 +17,7 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import org.ggp.base.player.gamer.statemachine.sample.TestGamer.BoardData;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.FullRolloutData;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.HistoryData;
 import org.ggp.base.player.gamer.statemachine.sample.TestGamer.MobilityData;
@@ -46,6 +47,9 @@ public class ReducedMCTree {
 	public List<Map<List<Integer>, HistoryData>> historyData;
 	public List<Map<Integer, HistoryData>> genHistoryData;
 
+	public int boardXLen, boardYLen, minPieceLine, maxPieceLine;
+	public List<BoardData> boardData;
+
 	public ReducedMCTree() {
 		this.states = new ArrayList<ReducedMCTNode>();
 		this.stateCompLookUp = new HashMap<Integer,List<Integer>>();
@@ -67,6 +71,12 @@ public class ReducedMCTree {
 		this.shortKeyHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+
+		this.boardXLen = 0;
+		this.boardYLen = 0;
+		this.minPieceLine = 0;
+		this.maxPieceLine = 0;
+		this.boardData = new ArrayList<BoardData>();
 	}
 
 	public ReducedMCTree(ArrayList<ReducedMCTNode> states, List<HashMap<List<Integer>, Pair<Double, Long>>> specificMoveTotalData, List<HashMap<Integer, Pair<Double, Long>>> generalMoveTotalData) {
@@ -90,6 +100,12 @@ public class ReducedMCTree {
 		this.shortKeyHistoryData = new ArrayList<Map<Integer, HistoryData>>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+
+		this.boardXLen = 0;
+		this.boardYLen = 0;
+		this.minPieceLine = 0;
+		this.maxPieceLine = 0;
+		this.boardData = new ArrayList<BoardData>();
 	}
 
 
@@ -162,7 +178,9 @@ public class ReducedMCTree {
                         lineNumberBound[6] = lineNumberBound[5] + numPlayers; // one line for each player assigning an ID to each unique move
                         lineNumberBound[7] = lineNumberBound[6] + numPlayers; //one line per player for general history heuristic data
                         lineNumberBound[8] = lineNumberBound[7] + numPlayers; //one line per player for specific history heuristic data
-                        lineNumberBound[9] = lineNumberBound[8] + 1; //one line assigning an ID to each unique state component
+                        lineNumberBound[9] = lineNumberBound[8] + 1; //one line giving board info
+                        lineNumberBound[10] = lineNumberBound[9] + 1; //one line for board heuristic data
+                        lineNumberBound[11] = lineNumberBound[10] + 1; //one line assigning an ID to each unique state component
                 		for(int i=0;i<numPlayers;i++) {
                 			this.specificMoveTotalData.add(new HashMap<List<Integer>, Pair<Double, Long>>());
                 			this.generalMoveTotalData.add(new HashMap<Integer, Pair<Double, Long>>());
@@ -372,7 +390,48 @@ public class ReducedMCTree {
                 		}
                 		this.historyData.add(playerDataExpanded);
 
-                	} else if(lineNumber < lineNumberBound[9]) { //one line assigning an ID to each unique state component
+                	} else if(lineNumber < lineNumberBound[9]) { //one line for board info
+                		this.boardXLen = Integer.parseInt(tok.nextToken());
+                		this.boardYLen = Integer.parseInt(tok.nextToken());
+                		this.minPieceLine = Integer.parseInt(tok.nextToken());
+                		this.maxPieceLine = Integer.parseInt(tok.nextToken());
+
+                	} else if(lineNumber < lineNumberBound[10]) { //one line for board heuristic data
+                		BoardData currData = new BoardData();
+                		boolean rewardRead = false;
+                		while(tok.hasMoreTokens()) {
+                			String nextTok = tok.nextToken();
+                			if(nextTok.equals("#")) {
+                				this.boardData.add(currData);
+                				currData = new BoardData();
+                				rewardRead = false;
+                			} else {
+                				if(!rewardRead) {
+                					for(int i=0;i<this.numPlayers;i++) {
+                						currData.finalReward.set(i, Integer.parseInt(nextTok));
+                						nextTok = tok.nextToken();
+                					}
+                					rewardRead = true;
+                				}
+                				int sym = Integer.parseInt(nextTok);
+                				currData.divisorPerSym.put(sym, Integer.parseInt(tok.nextToken()));
+                				currData.centreDistPerSym.put(sym, Float.parseFloat(tok.nextToken()));
+                				currData.xSideDistPerSym.put(sym, Float.parseFloat(tok.nextToken()));
+                				currData.ySideDistPerSym.put(sym, Float.parseFloat(tok.nextToken()));
+                				currData.cornerDistPerSym.put(sym, Float.parseFloat(tok.nextToken()));
+                				for(int lineIndex=0;lineIndex+this.minPieceLine<=this.maxPieceLine;lineIndex++) {
+                					int lineCount = Integer.parseInt(tok.nextToken());
+                					int lineLen = lineIndex + this.minPieceLine;
+                					int targetIndex = lineLen - TestGamer.MIN_PIECE_LINE;
+                					if(targetIndex >= 0 && targetIndex < currData.linesPerLengthPerSym.size()) {
+                						currData.linesPerLengthPerSym.get(targetIndex).put(sym, lineCount);
+                					}
+                				}
+                				tok.nextToken(); //Throw away "*"
+                			}
+                		}
+
+                	} else if(lineNumber < lineNumberBound[11]) { //one line assigning an ID to each unique state component
                 		int currCompNum = 0;
                 		List<Integer> currComp = new ArrayList<Integer>();
                 		while(tok.hasMoreTokens()) {
@@ -523,7 +582,7 @@ public class ReducedMCTree {
 
     public int saveToFile(String outFileName, String mctSaveDir) {
 		int count = 0;
-		int numRoles = this.specificMoveTotalData.size();
+		int numRoles = this.numPlayers; //this.specificMoveTotalData.size();
 		String headerStr = "";
 		String outStr = "";
 		String stateStr = "";

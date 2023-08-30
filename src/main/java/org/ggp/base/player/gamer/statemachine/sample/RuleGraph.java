@@ -28,6 +28,7 @@ public class RuleGraph {
 	private static ArrayList<String> builtInArray = new ArrayList<String>(Arrays.asList("role", "base", "input", "init", "true", "does", "next", "legal", "goal", "terminal"));
 	public static HashSet<String> builtIns = new HashSet<String>(builtInArray);
 	public static final int MIN_NUMBER_CHAIN = 20;
+	public static final int SHORT_NUM_CHAIN = 3;
 
 	private List<Gdl> rules;
 	private ArrayList<RuleNode> ruleGraph; //the whole rule graph
@@ -38,6 +39,10 @@ public class RuleGraph {
 	private List<Pair<String,List<String>>> numberChains; //key of pair is the name of the successor function, value contains the ordered chain of number names
 	private HashSet<Integer> numberIDs;
 	private List<Pair<Integer,List<Integer>>> numberIDChains;
+	private HashSet<String> shortNumNames;
+	private List<Pair<String,List<String>>> shortNumChains; //fit the number chain patter, but may be below the minimum length to be considered a number chain
+	private HashSet<Integer> shortNumIDs;
+	private List<Pair<Integer,List<Integer>>> shortNumIDChains;
 	private List<Role> roles;
 	private List<Integer> roleIds; //IDs of symbols corresponding to roles, ordered the same way they are indexed for goals, etc.
 //	private HashMap<String, HashSet<Integer>> nameTable; //records the IDs of all occurrences for a particular name
@@ -54,6 +59,10 @@ public class RuleGraph {
 		this.numberChains = null;
 		this.numberIDs = new HashSet<Integer>();
 		this.numberIDChains = new ArrayList<Pair<Integer,List<Integer>>>();
+		this.shortNumNames = new HashSet<String>();
+		this.shortNumChains = null;
+		this.shortNumIDs = new HashSet<Integer>();
+		this.shortNumIDChains = new ArrayList<Pair<Integer,List<Integer>>>();
 		this.roles = roles;
 		this.roleIds = null;
 //		this.nameTable = new HashMap<String, HashSet<Integer>>();
@@ -110,12 +119,24 @@ public class RuleGraph {
 		return this.numberChains;
 	}
 
+	public List<Pair<String,List<String>>> getShortNumChains() {
+		return this.shortNumChains;
+	}
+
 	public HashSet<Integer> getNumberIDs() {
 		return this.numberIDs;
 	}
 
+	public HashSet<Integer> getShortNumIDs() {
+		return this.shortNumIDs;
+	}
+
 	public List<Pair<Integer,List<Integer>>> getNumberIDChains() {
 		return this.numberIDChains;
+	}
+
+	public List<Pair<Integer,List<Integer>>> getShortNumIDChains() {
+		return this.shortNumIDChains;
 	}
 
 
@@ -193,6 +214,7 @@ public class RuleGraph {
 		List<List<String>> candidates = findNumberCandidates();
 		HashMap<String, List<List<String>>> candPerSuccessorFn = new HashMap<String, List<List<String>>>();
 		List<Pair<String,List<String>>> allChains = new ArrayList<Pair<String,List<String>>>();
+		List<Pair<String,List<String>>> allShortChains = new ArrayList<Pair<String,List<String>>>();
 
 		for(List<String> cand : candidates) {
 			String fnName = cand.get(0);
@@ -245,16 +267,24 @@ public class RuleGraph {
 						endFrag = null;
 					}
 				}
+
 				if(chain.size() >= RuleGraph.MIN_NUMBER_CHAIN) {
 					allChains.add(new Pair<String,List<String>>(fnName, chain));
 					for(String name : chain) {
 						this.numberNames.add(name);
 					}
 				}
+				if(chain.size() >= RuleGraph.SHORT_NUM_CHAIN) {
+					allShortChains.add(new Pair<String,List<String>>(fnName, chain));
+					for(String name : chain) {
+						this.shortNumNames.add(name);
+					}
+				}
 			}
 		}
 
 		this.numberChains = allChains;
+		this.shortNumChains = allShortChains;
 		for(String name : this.numberNames) {
 			RuleNode node = ruleGraph.get(this.topLevelNames.get(name));
 			node.setColour(RuleNodeColour.NUMBER_SYM);
@@ -264,6 +294,9 @@ public class RuleGraph {
 		for(String name : this.numberNames) {
 			this.numberIDs.add(lookup.get(name));
 		}
+		for(String name : this.shortNumNames) {
+			this.shortNumIDs.add(lookup.get(name));
+		}
 		for(Pair<String,List<String>> chain : this.numberChains) {
 			int fnID = lookup.get(chain.getKey());
 			List<Integer> chainIDs = new ArrayList<Integer>();
@@ -271,6 +304,14 @@ public class RuleGraph {
 				chainIDs.add(lookup.get(name));
 			}
 			this.numberIDChains.add(new Pair<Integer,List<Integer>>(fnID, chainIDs));
+		}
+		for(Pair<String,List<String>> chain : this.shortNumChains) {
+			int fnID = lookup.get(chain.getKey());
+			List<Integer> chainIDs = new ArrayList<Integer>();
+			for(String name : chain.getValue()) {
+				chainIDs.add(lookup.get(name));
+			}
+			this.shortNumIDChains.add(new Pair<Integer,List<Integer>>(fnID, chainIDs));
 		}
 //		System.out.println(this.numberChains + "\n");
 //		System.out.println(this.numberNames);
@@ -577,6 +618,11 @@ public class RuleGraph {
 			RuleNode node = ruleGraph.get(currID);
 			System.out.println(node.shortToString());
 		}
+	}
+
+
+	public String idToNameStr(int id) {
+		return this.ruleGraph.get(id).getName();
 	}
 
 
