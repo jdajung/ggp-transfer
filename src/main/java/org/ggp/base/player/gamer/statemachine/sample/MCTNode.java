@@ -44,6 +44,8 @@ public class MCTNode {
 //	private Set<List<Integer>> terminalFacts;
 	private boolean isExpanded;
 	private List<Double> heuristicGoals;
+	private List<List<Pair<Double,Double>>> heuristicBreakdown;
+	private List<boolean[]> heuristicUsed;
 
 	public static final double TRANSFER_TERM_SENTINEL = -9999;
 	public static final int STATE_TYPE = 1;   //0 for state trees, 1 for lists of components. 0 is deprecated. Don't use 0.
@@ -88,6 +90,8 @@ public class MCTNode {
 		this.nearestWin = new ArrayList<Integer>();
 		this.nearestLoss = new ArrayList<Integer>();
 		this.heuristicGoals = new ArrayList<Double>();
+		this.heuristicBreakdown = new ArrayList<List<Pair<Double,Double>>>();
+		this.heuristicUsed = new ArrayList<boolean[]>();
 		List<Role> allRoles = this.machine.getRoles();
 		this.totalReward = new ArrayList<Double>();
 		for(Role r : allRoles) {
@@ -95,6 +99,15 @@ public class MCTNode {
 			this.nearestWin.add(-1);
 			this.nearestLoss.add(-1);
 			this.heuristicGoals.add(-1.0);
+			int numHeur = 9 + TestGamer.MAX_PIECE_LINE - TestGamer.MIN_PIECE_LINE + 1;
+			List<Pair<Double,Double>> breakdown = new ArrayList<Pair<Double,Double>>();
+			boolean[] used = new boolean[numHeur];
+			for(int i=0;i<numHeur;i++) {
+				breakdown.add(new Pair<Double,Double>(-1.0,-1.0));
+				used[i] = false;
+			}
+			this.heuristicBreakdown.add(breakdown);
+			this.heuristicUsed.add(used);
 		}
 		this.goals = null;
 		this.transferTerm = TRANSFER_TERM_SENTINEL;
@@ -150,6 +163,43 @@ public class MCTNode {
 
 	public void setHeuristicGoals(List<Double> newGoals) {
 		this.heuristicGoals = newGoals;
+	}
+
+	public void setHeuristicBreakdown(List<Pair<Double,Double>> breakdown, int roleIndex) {
+		this.heuristicBreakdown.set(roleIndex, breakdown);
+	}
+
+	public void setHeuristicUsed(boolean[] used, int roleIndex) {
+		this.heuristicUsed.set(roleIndex, used);
+	}
+
+	public String heuristicBreakdownToString(int roleIndex) {
+		List<Pair<Double,Double>> breakdown = this.heuristicBreakdown.get(roleIndex);
+		boolean[] used = this.heuristicUsed.get(roleIndex);
+		String str = "SC: " + used[0] + " " + breakdown.get(0).getKey() + " " + breakdown.get(0).getValue();
+		str += " Mob: " + used[1] + " " + breakdown.get(1).getKey() + " " + breakdown.get(1).getValue();
+		str += " NW: " + used[2] + " " + breakdown.get(2).getKey() + " " + breakdown.get(2).getValue();
+		str += " Gen: " + used[3] + " " + breakdown.get(3).getKey() + " " + breakdown.get(3).getValue();
+		str += " Spec: " + used[4] + " " + breakdown.get(4).getKey() + " " + breakdown.get(4).getValue();
+		str += " Centre: " + used[5] + " " + breakdown.get(5).getKey() + " " + breakdown.get(5).getValue();
+		str += " X-Side: " + used[6] + " " + breakdown.get(6).getKey() + " " + breakdown.get(6).getValue();
+		str += " Y-Side: " + used[7] + " " + breakdown.get(7).getKey() + " " + breakdown.get(7).getValue();
+		str += " Corner: " + used[8] + " " + breakdown.get(8).getKey() + " " + breakdown.get(8).getValue();
+		for(int lineIndex=0;lineIndex+TestGamer.MIN_PIECE_LINE<=TestGamer.MAX_PIECE_LINE;lineIndex++) {
+			int lineLen = lineIndex+TestGamer.MIN_PIECE_LINE;
+			int index = 9 + lineIndex;
+			str += " " + lineLen + "-Line: " + used[index] + " " + breakdown.get(index).getKey() + " " + breakdown.get(index).getValue();
+		}
+		return str;
+	}
+
+	public String heuristicBreakdownToString() {
+		int turn = this.getWhoseTurnAssume2P();
+		if(turn >= 0) {
+			return heuristicBreakdownToString(turn);
+		} else {
+			return "ERROR: heuristicBreakdownToString could not determine whose turn it is.";
+		}
 	}
 
 	public int getWhoseTurn() {

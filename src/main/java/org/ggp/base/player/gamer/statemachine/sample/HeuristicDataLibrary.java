@@ -154,7 +154,7 @@ public class HeuristicDataLibrary {
 
 	//Perform write to file
 	public static void writeHeuristicFile(List<SCRegressionContainer> scRegression, List<SimpleRegression> mobRegression, List<SimpleRegression> nearestWinRegression,
-			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, List<LoadedBoardRegContainer> boardData, int minLine, int maxLine, String savePath) {
+			List<Map<List<Integer>, HistoryData>> historyData, List<Map<Integer, HistoryData>> genHistoryData, List<LoadedBoardRegContainer> boardRegression, int minLine, int maxLine, String savePath) {
 		int numPlayers = scRegression.size();
 		String headerStr = "" + numPlayers + " " + minLine + " " + maxLine;
     	String[] scStr = new String[numPlayers];
@@ -178,7 +178,12 @@ public class HeuristicDataLibrary {
     		genHistStr[i] = "";
     		specHistStr[i] = "";
     		centreStr[i] = "";
-    		//HERE
+    		xSideStr[i] = "";
+    		ySideStr[i] = "";
+    		cornerStr[i] = "";
+    		for(int lineIndex=0;lineIndex+minLine<=maxLine;lineIndex++) {
+    			lineStr.get(lineIndex)[i] = "";
+    		}
 
     		scStr[i] += scRegression.get(i).avgR + " ";
     		for(SymbolCountKey key : scRegression.get(i).regMap.keySet()) {
@@ -203,7 +208,17 @@ public class HeuristicDataLibrary {
     			specHistStr[i] += currData.totalReward + " " + currData.numWins + " " + currData.numLosses + " " + currData.numOther + " " + currData.numOccs + " * ";
     		}
 
-
+    		LoadedBoardRegContainer brc = boardRegression.get(i);
+    		for(int sym : brc.centreDistReg.keySet()) {
+    			centreStr[i] += sym + " " + brc.centreDistReg.get(sym).getSlope() + " " + brc.centreDistReg.get(sym).getIntercept() + " " + brc.centreDistReg.get(sym).getN() + " " + brc.centreDistReg.get(sym).getR() + " * ";
+    			xSideStr[i] += sym + " " + brc.xSideDistReg.get(sym).getSlope() + " " + brc.xSideDistReg.get(sym).getIntercept() + " " + brc.xSideDistReg.get(sym).getN() + " " + brc.xSideDistReg.get(sym).getR() + " * ";
+    			ySideStr[i] += sym + " " + brc.ySideDistReg.get(sym).getSlope() + " " + brc.ySideDistReg.get(sym).getIntercept() + " " + brc.ySideDistReg.get(sym).getN() + " " + brc.ySideDistReg.get(sym).getR() + " * ";
+    			cornerStr[i] += sym + " " + brc.cornerDistReg.get(sym).getSlope() + " " + brc.cornerDistReg.get(sym).getIntercept() + " " + brc.cornerDistReg.get(sym).getN() + " " + brc.cornerDistReg.get(sym).getR() + " * ";
+    			for(int lineIndex=0;lineIndex+minLine<=maxLine;lineIndex++) {
+    				lineStr.get(lineIndex)[i] += sym + " " + brc.lineReg.get(lineIndex).get(sym).getSlope() + " " + brc.lineReg.get(lineIndex).get(sym).getIntercept() + " "
+    						+ brc.lineReg.get(lineIndex).get(sym).getN() + " " + brc.lineReg.get(lineIndex).get(sym).getR() + " * ";
+    			}
+    		}
     	}
 
 
@@ -241,6 +256,11 @@ public class HeuristicDataLibrary {
             }
             for(int i=0;i<numPlayers;i++) {
             	br.write(cornerStr[i] + "\n");
+            }
+            for(int lineIndex=0;lineIndex+minLine<=maxLine;lineIndex++) {
+            	for(int i=0;i<numPlayers;i++) {
+                	br.write(lineStr.get(lineIndex)[i] + "\n");
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();

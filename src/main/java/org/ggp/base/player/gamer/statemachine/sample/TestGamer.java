@@ -158,7 +158,7 @@ public class TestGamer extends StateMachineGamer
 	public static final int MAX_PIECE_LINE = 5;
 
 	public static final double HEURISTIC_INITIAL = 1.0;//0.9;
-	public double HEURISTIC_DECAY = 0.99;//0.9;
+	public double HEURISTIC_DECAY = 0.9;//0.99;//0.9;
 
 	public static final double FLOAT_THRESH = 0.00001;
 	public static final int WIN_THRESH = 80;
@@ -657,6 +657,18 @@ public class TestGamer extends StateMachineGamer
 //		        		System.out.println(this.sMap.getTargetName(specMove) + ": " + specMove + " " + value + " " + winPercent);
 //		        	}
 	    		}
+    			System.out.println("*********** Board Heuristics ***********");
+    			LoadedBoardRegContainer brc = loadedBoardRegression.get(roleIndex);
+    			for(int sym : brc.centreDistReg.keySet()) {
+    				System.out.println("symbol: " + sym + " - " + this.sMap.getTargetName(sym));
+    				System.out.println("centre: " + brc.centreDistReg.get(sym).getR() + " " + brc.centreDistReg.get(sym).getN());
+    				System.out.println("x-side: " + brc.xSideDistReg.get(sym).getR() + " " + brc.xSideDistReg.get(sym).getN());
+    				System.out.println("y-side: " + brc.ySideDistReg.get(sym).getR() + " " + brc.ySideDistReg.get(sym).getN());
+    				System.out.println("corner: " + brc.cornerDistReg.get(sym).getR() + " " + brc.cornerDistReg.get(sym).getN());
+    				for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    					System.out.println((lineIndex+MIN_PIECE_LINE) + "-line: " + brc.lineReg.get(lineIndex).get(sym).getR() + " " + brc.lineReg.get(lineIndex).get(sym).getN());
+    				}
+    			}
 	    	}
 
 	    	this.mappedRoleIndices = this.sMap.getMappedRoleIndices(allRoles);
@@ -997,6 +1009,7 @@ public class TestGamer extends StateMachineGamer
 				for(Integer i : goals) { //convert goal values to double type
 					goalDoubles.add(i.doubleValue());
 				}
+				cacheBoard(currNode.getStateSet()); //cache the terminal board, since this is likely to reveal board boundaries for some games
 				backprop(goalDoubles, pathInOrder, currNode);
     		} else {
     			goalDoubles = currNode.getHeuristicGoals();
@@ -1186,10 +1199,12 @@ public class TestGamer extends StateMachineGamer
     		startOver = false;
     		xLength = xMax - xMin + 1;
     		yLength = yMax - yMin + 1;
-    		board = new int[xLength][yLength];
-    		uniqueSyms = new HashSet<Integer>();
-    		for(int i=0;i<board.length;i++) {
-    			Arrays.fill(board[i], -1);
+    		if(xLength > 0 && yLength > 0) {
+	    		board = new int[xLength][yLength];
+	    		uniqueSyms = new HashSet<Integer>();
+	    		for(int i=0;i<board.length;i++) {
+	    			Arrays.fill(board[i], -1);
+	    		}
     		}
     		for(List<Integer> tuple : state) {
     			int[] boardPosn = tupleToBoardPosn(tuple);
@@ -1226,7 +1241,7 @@ public class TestGamer extends StateMachineGamer
 
 
     private Board cacheBoard(Set<List<Integer>> state) {
-    	if(!this.boardCache.containsKey(state) || this.boardCache.get(state).xLength < this.xMax - this.xMin || this.boardCache.get(state).yLength < this.yMax - this.yMin) {
+    	if(!this.boardCache.containsKey(state) || this.boardCache.get(state).xLength < this.xMax - this.xMin + 1 || this.boardCache.get(state).yLength < this.yMax - this.yMin + 1) {
     		Board board = boardFromState(state);
     		this.boardCache.put(state, board);
     	}
@@ -1263,9 +1278,8 @@ public class TestGamer extends StateMachineGamer
     }
 
 
-    //Calculates the combined heuristic evaluation function described in Section 3.1
-    //Note: there is an option for an alternate history heuristic calculation that was not used for the paper
-    public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, Set<List<Move>> allMoveCombos, boolean verbose) {
+
+    public List<Pair<Double,Double>> calcHeuristicValueWeightPairs(Move m, MCTNode node, int roleIndex, Set<List<Move>> allMoveCombos, boolean verbose) {
     	List<Integer> moveList = this.sMap.convertMoveToList(m);
     	int genID = moveList.get(0);
 
@@ -1418,22 +1432,36 @@ public class TestGamer extends StateMachineGamer
 	    	}
     	}
 
-    	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight + centreWeight + xSideWeight + ySideWeight + cornerWeight;
+    	List<Pair<Double,Double>> pairList = new ArrayList<Pair<Double,Double>>();
+    	pairList.add(new Pair<Double,Double>(scVal, scWeight));
+    	pairList.add(new Pair<Double,Double>(mobVal, mobWeight));
+    	pairList.add(new Pair<Double,Double>(nearestWinVal, nearestWinWeight));
+    	pairList.add(new Pair<Double,Double>(genHistVal, genHistWeight));
+    	pairList.add(new Pair<Double,Double>(specHistVal, specHistWeight));
+    	pairList.add(new Pair<Double,Double>(centreVal, centreWeight));
+    	pairList.add(new Pair<Double,Double>(xSideVal, xSideWeight));
+    	pairList.add(new Pair<Double,Double>(ySideVal, ySideWeight));
+    	pairList.add(new Pair<Double,Double>(cornerVal, cornerWeight));
     	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
-    		totalWeight += lineWeights.get(lineIndex);
+    		pairList.add(new Pair<Double,Double>(lineVals.get(lineIndex), lineWeights.get(lineIndex)));
     	}
-    	double result = 0;
-    	if(totalWeight > 0) {
-    		result = scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight + centreVal*centreWeight + xSideVal*xSideWeight + ySideVal*ySideWeight + cornerVal*cornerWeight;
-    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
-    			result += lineVals.get(lineIndex)*lineWeights.get(lineIndex);
-    		}
-    		result /= totalWeight;
-    	}
+
+//    	double totalWeight = scWeight + mobWeight + nearestWinWeight + genHistWeight + specHistWeight + centreWeight + xSideWeight + ySideWeight + cornerWeight;
+//    	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+//    		totalWeight += lineWeights.get(lineIndex);
+//    	}
+//    	double result = 0;
+//    	if(totalWeight > 0) {
+//    		result = scVal*scWeight + mobVal*mobWeight + nearestWinVal*nearestWinWeight + genHistVal*genHistWeight + specHistVal*specHistWeight + centreVal*centreWeight + xSideVal*xSideWeight + ySideVal*ySideWeight + cornerVal*cornerWeight;
+//    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+//    			result += lineVals.get(lineIndex)*lineWeights.get(lineIndex);
+//    		}
+//    		result /= totalWeight;
+//    	}
 
     	if(verbose) {
 	    	System.out.println("*** Heuristic Calculation ***");
-	    	System.out.println(result);
+//	    	System.out.println(result);
 	    	System.out.println("SC: " + scVal + " " + scWeight);
 	    	System.out.println("Mob: " + mobVal + " " + mobWeight + " " + mobDif);
 	    	System.out.println("NW: " + nearestWinVal + " " + nearestWinWeight + " " + node.getNearestWin().get(roleIndex));
@@ -1449,7 +1477,26 @@ public class TestGamer extends StateMachineGamer
 	    	System.out.println("");
     	}
 
-    	node.getHeuristicGoals().set(roleIndex, result);
+//    	node.getHeuristicGoals().set(roleIndex, result); //this functionality has been moved to selectChild
+    	return pairList;
+    }
+
+
+    //Calculates the combined heuristic evaluation function described in Section 3.1
+    //Note: there is an option for an alternate history heuristic calculation that was not used for the paper
+    public double calcHeuristicValue(Move m, MCTNode node, int roleIndex, Set<List<Move>> allMoveCombos, boolean verbose) {
+    	List<Pair<Double,Double>> heurPairs = this.calcHeuristicValueWeightPairs(m, node, roleIndex, allMoveCombos, verbose);
+    	double result = 0;
+    	double totalWeight = 0;
+    	for(Pair<Double,Double> pair : heurPairs) {
+    		result += pair.getKey() * pair.getValue();
+    		totalWeight += pair.getValue();
+    	}
+    	if(totalWeight > 0) {
+    		result /= totalWeight;
+    	} else {
+    		result = 0;
+    	}
     	return result;
     }
 
@@ -2321,6 +2368,7 @@ public class TestGamer extends StateMachineGamer
     	List<Move> bestMove = null;
     	double bestScore = -1000;
     	double bestHeuristic = -1000;
+    	int turnIndex = root.getWhoseTurnAssume2P();
 
 		int maxVisits = 0;
 		if(PLAY_SELECT_MODE.equals("visits")) {
@@ -2351,7 +2399,15 @@ public class TestGamer extends StateMachineGamer
     			System.out.println("ERROR: Invalid mode for selecting best move.");
     		}
 
-    		System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getHeuristicGoals().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
+
+    		if(turnIndex<0) {
+    			System.out.println("Could not determine whose turn it is.");
+    			System.out.println("! " + currNode.getTotalReward().get(this.roleIndex) / currNode.getNumVisits() + " " + currNode.getHeuristicGoals().get(this.roleIndex) + " " + currNode.getNumVisits() + " " + move);
+    		} else {
+    			System.out.println("! " + currNode.getTotalReward().get(turnIndex) / currNode.getNumVisits() + " " + currNode.getHeuristicGoals().get(turnIndex) + " " + currNode.getNumVisits() + " " + move);
+    			System.out.println(currNode.heuristicBreakdownToString(turnIndex));
+    		}
+
 
     		if(bestMove == null || currScore > bestScore+FLOAT_THRESH) {
     			bestMove = move;
@@ -2385,32 +2441,149 @@ public class TestGamer extends StateMachineGamer
     	double bestScore = -1000;
     	ArrayList<List<Move>> bestCombos = new ArrayList<List<Move>>();
 
-    	for(List<Move> moveCombo : currNode.getChildren().keySet()) { //consider each possible child node
-    		MCTNode child = currNode.getChildren().get(moveCombo);
-    		double currScore;
-    		if(child != null && child.isTerminal() && (child.getGoals().get(turnIndex) >= WIN_THRESH || child.getGoals().get(turnIndex) <= LOSE_THRESH)) {
-    			if(child.getGoals().get(turnIndex) >= WIN_THRESH) { //assume that an instant win will always be taken
-    				currScore = 1000000;
-    			} else { //assume that an instant loss will always be avoided
-    				currScore = 0;
-    			}
-    		} else {
-	    		if(SELECTION_HEURISTIC && this.heuristicsReady) {
-	    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
-	    		} else { //if selection guidance is disabled, just use regular UCB1
-	    			currScore = ucb1Basic(child, turnIndex);
+    	if(SELECTION_HEURISTIC && this.heuristicsReady) { //if we are doing heuristic-guided search (either SI or TI)
+    		List<Pair<List<Move>, List<Pair<Double,Double>>>> heurPairs = new ArrayList<Pair<List<Move>, List<Pair<Double,Double>>>>();
+    		Map<List<Move>, Double> childScores = new HashMap<List<Move>, Double>();
+    		for(List<Move> moveCombo : currNode.getChildren().keySet()) { //consider each possible child node
+	    		MCTNode child = currNode.getChildren().get(moveCombo);
+	    		if(child != null && child.isTerminal() && (child.getGoals().get(turnIndex) >= WIN_THRESH || child.getGoals().get(turnIndex) <= LOSE_THRESH)) {
+	    			if(child.getGoals().get(turnIndex) >= WIN_THRESH) { //assume that an instant win will always be taken
+	    				childScores.put(moveCombo, 10000000.0);
+	    			} else { //assume that an instant loss will always be avoided
+	    				childScores.put(moveCombo, 0.0);
+	    			}
+	    		} else {
+	    			if(child != null && child.getNumVisits() != 0) {
+	    				heurPairs.add(new Pair<List<Move>, List<Pair<Double,Double>>>(moveCombo, this.calcHeuristicValueWeightPairs(moveCombo.get(turnIndex), child, turnIndex, currNode.getChildren().keySet(), false)));
+	    			} else {
+	    				childScores.put(moveCombo, NEW_EXPLORE_VALUE);
+	    			}
 	    		}
     		}
+    		if(heurPairs.size() > 0) {
+    			int numPairs = heurPairs.get(0).getValue().size();
 
-    		if (currScore > bestScore) {
-    			bestCombos = new ArrayList<List<Move>>();
-    			bestCombos.add(moveCombo);
-    			bestScore = currScore;
-    		} else if (currScore == bestScore) {
-    			bestCombos.add(moveCombo);
+    			for(int i=0;i<numPairs;i++) { //scale values so that for each heuristic, the best child has a score of MAX_REWARD
+    				double maxVal = heurPairs.get(0).getValue().get(i).getKey();
+    				for(int j=0;j<heurPairs.size();j++) {
+    					double currVal = heurPairs.get(j).getValue().get(i).getKey();
+    					if(currVal > maxVal) {
+    						maxVal = currVal;
+    					}
+    				}
+    				for(int j=0;j<heurPairs.size();j++) {
+    					if(maxVal > FLOAT_THRESH) {
+    						heurPairs.get(j).getValue().set(i, new Pair<Double,Double>(heurPairs.get(j).getValue().get(i).getKey() / maxVal * MAX_REWARD_VALUE, heurPairs.get(j).getValue().get(i).getValue()));
+    					} else {
+    						heurPairs.get(j).getValue().set(i, new Pair<Double,Double>(0.0, heurPairs.get(j).getValue().get(i).getValue()));
+    					}
+    				}
+    			}
+
+    			boolean[] usePair = new boolean[numPairs];
+    			for(int i=0;i<numPairs;i++) { //if a particular heuristic value (e.g. mobility) is the same across all children, discard it
+    				usePair[i] = false;
+    				double firstVal = -1;
+    				for(int j=0;j<heurPairs.size();j++) {
+    					Pair<List<Move>, List<Pair<Double,Double>>> curr = heurPairs.get(j);
+    					if(j==0) {
+    						firstVal = curr.getValue().get(i).getKey();
+    					} else {
+    						if(Math.abs(firstVal - curr.getValue().get(i).getKey()) > FLOAT_THRESH) {
+    							usePair[i] = true;
+    							break;
+    						}
+    					}
+    				}
+    			}
+
+    			double minScore = MAX_REWARD_VALUE;
+    			double maxScore = 0;
+    			for(Pair<List<Move>, List<Pair<Double,Double>>> curr : heurPairs) { //calculate combined a combined heuristic value for each child
+    				double heurVal = 0;
+    				double totalWeight = 0;
+    				for(int i=0;i<curr.getValue().size();i++) {
+    					Pair<Double,Double> pair = curr.getValue().get(i);
+    					if(usePair[i]) {
+	    		    		heurVal += pair.getKey() * pair.getValue();
+	    		    		totalWeight += pair.getValue();
+    					}
+    		    	}
+    		    	if(totalWeight > 0) {
+    		    		heurVal /= totalWeight;
+    		    	} else {
+    		    		heurVal = 0;
+    		    	}
+
+    		    	if(heurVal < minScore) {
+    		    		minScore = heurVal;
+    		    	}
+    		    	if(heurVal > maxScore) {
+    		    		maxScore = heurVal;
+    		    	}
+
+    		    	MCTNode child = currNode.getChildren().get(curr.getKey());
+    		    	child.getHeuristicGoals().set(turnIndex, heurVal);
+    		    	child.setHeuristicBreakdown(curr.getValue(), turnIndex);
+    		    	child.setHeuristicUsed(usePair, turnIndex);
+//    		    	childScores.put(curr.getKey(), ucb1HeuristicProvided(child, turnIndex, heurVal));
+    			}
+
+    			double interval = Math.abs(maxScore - minScore);
+    			for(Pair<List<Move>, List<Pair<Double,Double>>> curr : heurPairs) {
+    				MCTNode child = currNode.getChildren().get(curr.getKey());
+    				double newScore = 0;
+    				if(interval > FLOAT_THRESH) {
+    					newScore = MAX_REWARD_VALUE * (child.getHeuristicGoals().get(turnIndex) - minScore) / interval;
+    				}
+    				child.getHeuristicGoals().set(turnIndex, newScore);
+    				childScores.put(curr.getKey(), ucb1HeuristicProvided(child, turnIndex, newScore));
+    			}
+
     		}
-//    		System.out.println("% " + currScore);
+
+			for(List<Move> currMove : childScores.keySet()) {
+				double currScore = childScores.get(currMove);
+				if (currScore - bestScore > FLOAT_THRESH) {
+	    			bestCombos = new ArrayList<List<Move>>();
+	    			bestCombos.add(currMove);
+	    			bestScore = currScore;
+	    		} else if (Math.abs(currScore - bestScore) < FLOAT_THRESH) {
+	    			bestCombos.add(currMove);
+	    		}
+			}
+
+
+
+    	} else {
+	    	for(List<Move> moveCombo : currNode.getChildren().keySet()) { //consider each possible child node
+	    		MCTNode child = currNode.getChildren().get(moveCombo);
+	    		double currScore;
+	    		if(child != null && child.isTerminal() && (child.getGoals().get(turnIndex) >= WIN_THRESH || child.getGoals().get(turnIndex) <= LOSE_THRESH)) {
+	    			if(child.getGoals().get(turnIndex) >= WIN_THRESH) { //assume that an instant win will always be taken
+	    				currScore = 10000000;
+	    			} else { //assume that an instant loss will always be avoided
+	    				currScore = 0;
+	    			}
+	    		} else {
+//		    		if(SELECTION_HEURISTIC && this.heuristicsReady) {
+//		    			currScore = ucb1HeuristicGuided(child, moveCombo.get(turnIndex), turnIndex, currNode.getChildren().keySet());
+//		    		} else { //if selection guidance is disabled, just use regular UCB1
+		    			currScore = ucb1Basic(child, turnIndex);
+//		    		}
+	    		}
+
+	    		if (currScore - bestScore > FLOAT_THRESH) {
+	    			bestCombos = new ArrayList<List<Move>>();
+	    			bestCombos.add(moveCombo);
+	    			bestScore = currScore;
+	    		} else if (Math.abs(currScore - bestScore) < FLOAT_THRESH) {
+	    			bestCombos.add(moveCombo);
+	    		}
+	//    		System.out.println("% " + currScore);
+	    	}
     	}
+
     	selectedCombo = bestCombos.get(rand.nextInt(bestCombos.size()));
     	currNode.getExpandedChild(selectedCombo, this.existingNodes, SAVE_MCT_TO_FILE);
     	return selectedCombo;
@@ -2443,6 +2616,27 @@ public class TestGamer extends StateMachineGamer
     	}
 //    	System.out.println(r + " " + n + " " + bigN + " " + c + " " + result);
 		return result;
+    }
+
+
+
+    //Produce a UCB1 value biased by a heuristic value calculated elsewhere and provided
+    private double ucb1HeuristicProvided (MCTNode currNode, int turnIndex, double heuristicValue) {
+    	double regularValue, regularExplore, finalValue;
+    	if(currNode == null || currNode.getNumVisits() == 0) {
+    		regularValue = 0;
+    		regularExplore = NEW_EXPLORE_VALUE;
+    		finalValue = regularValue;
+    	} else {
+    		regularValue = (currNode.getTotalReward().get(turnIndex) / MAX_REWARD_VALUE) / currNode.getNumVisits();
+    		regularExplore = EXPLORE_PARAM*Math.sqrt(Math.log(currNode.getTotalParentVisits())/currNode.getNumVisits());
+    		double heuristicWeight = HEURISTIC_INITIAL * Math.pow(HEURISTIC_DECAY, currNode.getNumVisits()-1);
+    		double regularWeight = 1 - heuristicWeight;
+    		finalValue = (heuristicValue / MAX_REWARD_VALUE)*heuristicWeight + regularValue*regularWeight;
+    	}
+
+//    	System.out.println("&& " + heuristicValue + " " + regularValue + " " + heuristicWeight + " " + regularWeight + " " + regularExplore);
+    	return finalValue + regularExplore;
     }
 
 
@@ -3198,7 +3392,8 @@ public class TestGamer extends StateMachineGamer
     	this.loadedNWRegression = new ArrayList<RegressionRecord>();
     	this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
     	this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
-    	loadHeuristicFile(inFileName, this.sMap, this.loadedSCRegression, this.loadedMobRegression, this.loadedNWRegression, this.genHistoryData, this.historyData);
+    	this.loadedBoardRegression = new ArrayList<LoadedBoardRegContainer>();
+    	loadHeuristicFile(inFileName, this.sMap, this.loadedSCRegression, this.loadedMobRegression, this.loadedNWRegression, this.genHistoryData, this.historyData, this.loadedBoardRegression);
     	this.heuristicsReady = true;
     }
 
@@ -3206,14 +3401,16 @@ public class TestGamer extends StateMachineGamer
     //Each list contains one entry corresponding to each role in the game
     //Note: IDs loaded from file WILL be replaced with their corresponding IDs in the target game
     public static void loadHeuristicFile(String inFileName, StateMapping sMap, List<LoadedSCRegContainer> loadedSCRegression, List<RegressionRecord> loadedMobRegression,
-    		List<RegressionRecord> loadedNWRegression, List<Map<Integer, HistoryData>> genHistoryData, List<Map<List<Integer>, HistoryData>> historyData) {
+    		List<RegressionRecord> loadedNWRegression, List<Map<Integer, HistoryData>> genHistoryData, List<Map<List<Integer>, HistoryData>> historyData, List<LoadedBoardRegContainer> loadedBoardRegression) {
     	Scanner s = null;
 
         try {
             s = new Scanner(new BufferedReader(new FileReader(inFileName), RuleGraphRecord.BUFFER_SIZE));
             int lineNumber = 0;
             int numPlayers = 0;
-            int[] lineNumberBound = new int[5];
+            int minLine = 0;
+            int maxLine = 0;
+            int[] lineNumberBound = new int[10];
             lineNumberBound[0] = 1; //unique line(s) at top of file
 
             while (s.hasNext()) {
@@ -3223,10 +3420,17 @@ public class TestGamer extends StateMachineGamer
 
                 	if(lineNumber < lineNumberBound[0]) { //unique line(s) at top of file
                 		numPlayers = Integer.parseInt(tok.nextToken());
+                		minLine = Integer.parseInt(tok.nextToken());
+                		maxLine = Integer.parseInt(tok.nextToken());
                 		lineNumberBound[1] = lineNumberBound[0] + numPlayers;
                         lineNumberBound[2] = lineNumberBound[1] + numPlayers;
                         lineNumberBound[3] = lineNumberBound[2] + numPlayers;
                         lineNumberBound[4] = lineNumberBound[3] + numPlayers;
+                        lineNumberBound[5] = lineNumberBound[4] + numPlayers;
+                        lineNumberBound[6] = lineNumberBound[5] + numPlayers;
+                        lineNumberBound[7] = lineNumberBound[6] + numPlayers;
+                        lineNumberBound[8] = lineNumberBound[7] + numPlayers;
+                        lineNumberBound[9] = lineNumberBound[8] + numPlayers;
 //                		for(int i=0;i<numPlayers;i++) {
 //
 //                		}
@@ -3294,7 +3498,7 @@ public class TestGamer extends StateMachineGamer
                 			}
                 		}
                 		genHistoryData.add(newGenHist);
-                	} else { //specific history data
+                	} else if(lineNumber < lineNumberBound[5]) { //specific history data
                 		Map<List<Integer>, HistoryData> newSpecHist = new HashMap<List<Integer>, HistoryData>();
                 		while(tok.hasMoreTokens()) {
                 			int moveSize = Integer.parseInt(tok.nextToken());
@@ -3324,6 +3528,86 @@ public class TestGamer extends StateMachineGamer
                 			}
                 		}
                 		historyData.add(newSpecHist);
+                	} else if(lineNumber < lineNumberBound[6]) { //board centre data
+                		LoadedBoardRegContainer brc = new LoadedBoardRegContainer();
+                		while(tok.hasMoreTokens()) {
+                			int sym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				tok.nextToken(); //throw away *
+            				if(sym != -1) {
+	            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	            				brc.centreDistReg.put(sym, currReg);
+            				}
+                		}
+                		loadedBoardRegression.add(brc);
+                	} else if(lineNumber < lineNumberBound[7]) { //x-side centre data
+                		int roleIndex = lineNumber - lineNumberBound[6];
+                		LoadedBoardRegContainer brc = loadedBoardRegression.get(roleIndex);
+                		while(tok.hasMoreTokens()) {
+                			int sym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				tok.nextToken(); //throw away *
+            				if(sym != -1) {
+	            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	            				brc.xSideDistReg.put(sym, currReg);
+            				}
+                		}
+                	} else if(lineNumber < lineNumberBound[8]) { //y-side centre data
+                		int roleIndex = lineNumber - lineNumberBound[7];
+                		LoadedBoardRegContainer brc = loadedBoardRegression.get(roleIndex);
+                		while(tok.hasMoreTokens()) {
+                			int sym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				tok.nextToken(); //throw away *
+            				if(sym != -1) {
+	            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	            				brc.ySideDistReg.put(sym, currReg);
+            				}
+                		}
+                	} else if(lineNumber < lineNumberBound[9]) { //corner centre data
+                		int roleIndex = lineNumber - lineNumberBound[8];
+                		LoadedBoardRegContainer brc = loadedBoardRegression.get(roleIndex);
+                		while(tok.hasMoreTokens()) {
+                			int sym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				tok.nextToken(); //throw away *
+            				if(sym != -1) {
+	            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	            				brc.cornerDistReg.put(sym, currReg);
+            				}
+                		}
+                	} else { //piece line data
+                		int roleIndex = (lineNumber - lineNumberBound[9]) % numPlayers;
+                		int lineIndex = (lineNumber - lineNumberBound[9]) / numPlayers;
+                		LoadedBoardRegContainer brc = loadedBoardRegression.get(roleIndex);
+                		while(tok.hasMoreTokens()) {
+                			int sym = sMap.mapSourceIDToTarget(Integer.parseInt(tok.nextToken()));
+                			double slope = Double.parseDouble(tok.nextToken());
+            				double intercept = Double.parseDouble(tok.nextToken());
+            				double numPoints = Double.parseDouble(tok.nextToken());
+            				double r = Double.parseDouble(tok.nextToken());
+            				tok.nextToken(); //throw away *
+            				if(sym != -1) {
+	            				RegressionRecord currReg = new RegressionRecord(slope, intercept, numPoints, r);
+	            				int lineLen = lineIndex + minLine;
+	            				int targetLineIndex = lineLen - MIN_PIECE_LINE;
+	            				if(targetLineIndex >= 0 && targetLineIndex < MAX_PIECE_LINE - MIN_PIECE_LINE + 1) {
+	            					brc.lineReg.get(targetLineIndex).put(sym, currReg);
+	            				}
+            				}
+                		}
                 	}
                 }
                 lineNumber++;

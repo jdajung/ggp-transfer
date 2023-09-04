@@ -159,7 +159,7 @@ public class ReducedMCTree {
             int lineNumber = 0;
             int numPlayers = 0;
             ArrayList<HashMap<Integer,List<Integer>>> moveLookUp = new ArrayList<HashMap<Integer,List<Integer>>>(); //for each role, keep a HashMap of move IDs to their full list of components (IDs do NOT correspond to rule graph IDs)
-            int[] lineNumberBound = new int[10];
+            int[] lineNumberBound = new int[12];
             lineNumberBound[0] = 1; //unique line(s) at top of file
 
             while (s.hasNext()) {
