@@ -505,7 +505,9 @@ public class MCTNode {
 					System.out.println(e);
 				}
 			}
-			if(roleIndicesWithChoices.size() > 1) {
+			if(roles.size() == 1) { //If there is only one player, it is that player's turn, whether or not there is actually a choice of moves
+				returnVal = 0;
+			} else if(roleIndicesWithChoices.size() > 1) {
 				returnVal = -2;
 			} else if (roleIndicesWithChoices.size() == 0) {
 				returnVal = -1;
