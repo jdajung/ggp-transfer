@@ -1,0 +1,7 @@
+{
+  "gameName": "Connect Four - 30 Turn Limit",  
+  "rulesheet": "connectFour.kif",  
+  "stylesheet": "connectFour.xsl",
+  "description": "connectFour.txt",
+  "user_interface": "connectFour.js"
+}

@@ -1,0 +1,7 @@
+{
+  "gameName": "Connect Four - Edge Pieces",  
+  "rulesheet": "connectFour.kif",  
+  "stylesheet": "connectFour.xsl",
+  "description": "connectFour.txt",
+  "user_interface": "connectFour.js"
+}
