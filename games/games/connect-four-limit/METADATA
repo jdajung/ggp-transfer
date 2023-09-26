@@ -1,5 +1,5 @@
 {
-  "gameName": "Connect Four - 30 Turn Limit",  
+  "gameName": "Connect Four - 36 Turn Limit",  
   "rulesheet": "connectFour.kif",  
   "stylesheet": "connectFour.xsl",
   "description": "connectFour.txt",
