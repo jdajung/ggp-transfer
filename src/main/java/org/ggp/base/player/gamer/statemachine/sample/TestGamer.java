@@ -83,6 +83,8 @@ public class TestGamer extends StateMachineGamer
 	private Map<Set<List<Integer>>, Board> boardCache;
 	private List<Map<List<Integer>, HistoryData>> historyData;
 	private List<Map<Integer, HistoryData>> genHistoryData;
+	private List<Map<List<Integer>, HistoryData>> loadedHistData;
+	private List<Map<Integer, HistoryData>> loadedGenHistData;
 	private List<Set<List<Integer>>> playedMoves;
 	private Map<SymbolCountKey, List<SymbolCountHeurData>> compiledSCData;
 	private List<MobilityHeurData> compiledMobData;
@@ -113,12 +115,14 @@ public class TestGamer extends StateMachineGamer
 	private boolean recordHistory;
 	private boolean recordBoardStuff;
 	private boolean heuristicsReady;
+	private String heurCheckStr;
 
 	//These are initialization parameters explained in and set by AutoPlayer
 	public boolean USE_TRANSFER = false; //This is a deprecated parameter that is still occasionally useful for debugging purposes
 	public boolean ROLLOUT_ORDERING;
 	public boolean NW_ENABLED;
 	public boolean SELECTION_HEURISTIC;
+	public boolean DISCARD_BAD_HEURISTICS;
 	public boolean EARLY_ROLLOUT_EVAL;
 	public double PLAY_TRANSFER_RATIO = 0.5;
 	public boolean LOAD_HEUR_FILE;
@@ -156,6 +160,10 @@ public class TestGamer extends StateMachineGamer
 	public static final double TRANSFER_THRESHOLD = 0.1; //To save time, ignore transfer completely when it decays beyond this value
 	public static final int MIN_PIECE_LINE = 2;
 	public static final int MAX_PIECE_LINE = 5;
+
+	public static final double COR_STRENGTH_THRESH = 0.1;
+	public static final double REWARD_DIF_THRESH = 5.0;
+	public static final double FULL_SI_THRESH = 0.5;
 
 	public static final double HEURISTIC_INITIAL = 1.0;//0.9;
 	public double HEURISTIC_DECAY = 0.9;//0.99;//0.9;
@@ -200,6 +208,8 @@ public class TestGamer extends StateMachineGamer
 		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.loadedHistData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.loadedGenHistData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
@@ -223,6 +233,7 @@ public class TestGamer extends StateMachineGamer
 		this.yPosChain = null;
 		this.xLookup = new HashMap<Integer,Integer>();
 		this.yLookup = new HashMap<Integer,Integer>();
+		this.heurCheckStr = "";
 
 
 		this.USE_TRANSFER = false;
@@ -234,9 +245,10 @@ public class TestGamer extends StateMachineGamer
 	//But the GGP library only allows default constructors, so whatever
 	public void initParams(List<?> params) {
 		this.NW_ENABLED = false;
+		this.ROLLOUT_ORDERING = false;
 		this.HEURISTIC_DECAY = (Double)(params.get(0));
 		this.SELECTION_HEURISTIC = (Boolean)(params.get(1));
-		this.ROLLOUT_ORDERING = (Boolean)(params.get(2));
+		this.DISCARD_BAD_HEURISTICS = (Boolean)(params.get(2));
 		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
 		this.LOAD_HEUR_FILE = (Boolean)(params.get(4));
 		this.RULE_GRAPH_FILE = (String)(params.get(5));
@@ -247,7 +259,7 @@ public class TestGamer extends StateMachineGamer
 		this.EXPERIMENT_SAVE_DIR = (String)(params.get(10));
 
 		this.MCT_SAVE_DIR = this.MCT_READ_DIR;
-		this.INITIAL_HEUR_RECORD = (ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && !LOAD_HEUR_FILE;
+		this.INITIAL_HEUR_RECORD = (ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && (!LOAD_HEUR_FILE || DISCARD_BAD_HEURISTICS);
 		this.USE_ALT_HIST_HEUR = false;//this.RULE_GRAPH_FILE.equals("connect_four_debug.txt");
 //		System.out.println(params);
 	}
@@ -864,7 +876,12 @@ public class TestGamer extends StateMachineGamer
     	if(INITIAL_HEUR_RECORD) {
 	    	System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 	    	long heurTimeStart = System.currentTimeMillis();
-	    	this.prepHeuristics();
+	    	if((ROLLOUT_ORDERING || SELECTION_HEURISTIC || EARLY_ROLLOUT_EVAL) && DISCARD_BAD_HEURISTICS) {
+	    		this.prepUnloadedHeuristics();
+	    		this.replaceBadHeuristics();
+	    	} else {
+	    		this.prepHeuristics();
+	    	}
 	    	long heurTimeEnd = System.currentTimeMillis();
 	    	this.recordSymOccs = false;
 	    	this.recordMobility = false;
@@ -1365,10 +1382,10 @@ public class TestGamer extends StateMachineGamer
     		Set<List<Integer>> availableSpecMoves = new HashSet<List<Integer>>();
     		for(List<Move> moveCombo : allMoveCombos) {
     			List<Integer> currMove = this.sMap.convertMoveToList(moveCombo.get(roleIndex));
-    			if(this.genHistoryData.get(roleIndex).containsKey(currMove.get(0))) {
+    			if(this.loadedGenHistData.get(roleIndex).containsKey(currMove.get(0))) {
     				availableGenMoves.add(currMove.get(0));
     			}
-    			if(this.historyData.get(roleIndex).containsKey(currMove)) {
+    			if(this.loadedHistData.get(roleIndex).containsKey(currMove)) {
     				availableSpecMoves.add(currMove);
     			}
     		}
@@ -1377,7 +1394,7 @@ public class TestGamer extends StateMachineGamer
 	    		double minGenVal = 1000;
 	    		double maxGenVal = -1000;
 	    		for(int currMoveID : availableGenMoves) {
-	    			HistoryData data = this.genHistoryData.get(roleIndex).get(currMoveID);
+	    			HistoryData data = this.loadedGenHistData.get(roleIndex).get(currMoveID);
 	    			double genMoveVal = data.totalReward / (double)data.numOccs;
 	    			if(genMoveVal > maxGenVal) {
 	    				maxGenVal = genMoveVal;
@@ -1387,8 +1404,8 @@ public class TestGamer extends StateMachineGamer
 	    			}
 	    		}
 		    	double interval = maxGenVal - minGenVal;
-		    	if(this.genHistoryData.get(roleIndex).containsKey(genID) && interval > 0) {
-		    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+		    	if(this.loadedGenHistData.get(roleIndex).containsKey(genID) && interval > 0) {
+		    		HistoryData data = this.loadedGenHistData.get(roleIndex).get(genID);
 		    		genHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minGenVal) / interval;
 		    		genHistWeight = Math.abs(genHistVal/(double)MAX_REWARD_VALUE - 0.5) * 2;
 		    	}
@@ -1398,7 +1415,7 @@ public class TestGamer extends StateMachineGamer
 	    		double minSpecVal = 1000;
 	    		double maxSpecVal = -1000;
 	    		for(List<Integer> currMoveID : availableSpecMoves) {
-	    			HistoryData data = this.historyData.get(roleIndex).get(currMoveID);
+	    			HistoryData data = this.loadedHistData.get(roleIndex).get(currMoveID);
 	    			double specMoveVal = data.totalReward / (double)data.numOccs;
 	    			if(specMoveVal > maxSpecVal) {
 	    				maxSpecVal = specMoveVal;
@@ -1408,8 +1425,8 @@ public class TestGamer extends StateMachineGamer
 	    			}
 	    		}
 		    	double interval = maxSpecVal - minSpecVal;
-		    	if(this.historyData.get(roleIndex).containsKey(moveList) && interval > 0) {
-		    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
+		    	if(this.loadedHistData.get(roleIndex).containsKey(moveList) && interval > 0) {
+		    		HistoryData data = this.loadedHistData.get(roleIndex).get(moveList);
 		    		specHistVal = MAX_REWARD_VALUE * ((((double)data.totalReward) / data.numOccs) - minSpecVal) / interval;
 		    		specHistWeight = Math.abs(specHistVal/(double)MAX_REWARD_VALUE - 0.5) * 2;
 		    	}
@@ -1418,15 +1435,15 @@ public class TestGamer extends StateMachineGamer
     	} else {
 	    	double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
 	    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
-	    	if(this.genHistoryData.get(roleIndex).containsKey(genID)) {
-	    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+	    	if(this.loadedGenHistData.get(roleIndex).containsKey(genID)) {
+	    		HistoryData data = this.loadedGenHistData.get(roleIndex).get(genID);
 	    		genHistVal = ((double)data.totalReward) / data.numOccs;
 	//    		genHistWeight = Math.pow(Math.abs(genHistVal - midVal)/divisor, 2);
 	    		genHistWeight = Math.abs(genHistVal - midVal)/divisor;
 	    	}
 
-	    	if(this.historyData.get(roleIndex).containsKey(moveList)) {
-	    		HistoryData data = this.historyData.get(roleIndex).get(moveList);
+	    	if(this.loadedHistData.get(roleIndex).containsKey(moveList)) {
+	    		HistoryData data = this.loadedHistData.get(roleIndex).get(moveList);
 	    		specHistVal = ((double)data.totalReward) / data.numOccs;
 	    		specHistWeight = Math.abs(specHistVal - midVal)/divisor;
 	    	}
@@ -1500,15 +1517,450 @@ public class TestGamer extends StateMachineGamer
     	return result;
     }
 
+    public void replaceBadHeuristics() {
+    	int goodCount = 0;
+    	int badCount = 0;
+    	int lowConfCount = 0;
+    	double loadedR, simR;
+    	boolean sameSign;
 
+    	for(int roleIndex=0;roleIndex<this.allRoles.size();roleIndex++) {
+	    	//Symbol Counting
+	    	int symGoodCount = 0;
+	    	int symBadCount = 0;
+	    	int symLowConfCount = 0;
+	    	for(SymbolCountKey key : this.scRegression.get(roleIndex).regMap.keySet()) {
+	    		SimpleRegression currSim = this.scRegression.get(roleIndex).regMap.get(key);
+	    		RegressionRecord currLoad;
+	    		if(this.loadedSCRegression.get(roleIndex).regMap.containsKey(key)) {
+	    			currLoad = this.loadedSCRegression.get(roleIndex).regMap.get(key);
+	    			simR = currSim.getR();
+	    	    	loadedR = currLoad.getR();
+	    	    	sameSign = (simR>0.0) == (loadedR>0.0);
+	    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    	    		symGoodCount++;
+	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    	    		symBadCount++;
+	    	    		this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    	    	} else {
+	    	    		symLowConfCount++;
+	    	    	}
+	    		} else {
+	    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    			if(Math.abs(currSim.getR()) > COR_STRENGTH_THRESH) {
+	    				symBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(symGoodCount+symBadCount>0 && symGoodCount/((double)symGoodCount + symBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(SymbolCountKey key : this.scRegression.get(roleIndex).regMap.keySet()) {
+	    			SimpleRegression currSim = this.scRegression.get(roleIndex).regMap.get(key);
+	    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    		}
+	    	} else {
+	    		if(symGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += symGoodCount + " " + symBadCount + " * ";
 
-    //Calls all functions that calculate heuristic parameters
-    //Used at the end of the start clock
-    public void prepHeuristics() {
+	    	//Mobility
+	    	simR = this.mobRegression.get(roleIndex).getR();
+	    	loadedR = this.loadedMobRegression.get(roleIndex).getR();
+	    	sameSign = (simR>0.0) == (loadedR>0.0);
+	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    		goodCount++;
+	    		heurCheckStr += "1 ";
+	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    		badCount++;
+	    		heurCheckStr += "-1 ";
+	    		this.loadedMobRegression.set(roleIndex, new RegressionRecord(this.mobRegression.get(roleIndex)));
+	    	} else {
+	    		lowConfCount++;
+	    		heurCheckStr += "0 ";
+	    	}
+	    	heurCheckStr += simR + " " + loadedR + " * ";
+
+	    	//General History
+	    	int genHistGoodCount = 0;
+	    	int genHistBadCount = 0;
+	    	int genHistLowConfCount = 0;
+	    	for(int genID : this.genHistoryData.get(roleIndex).keySet()) {
+	    		HistoryData currSimData = this.genHistoryData.get(roleIndex).get(genID);
+	    		double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
+		    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
+		    	double simAvg = ((double)currSimData.totalReward) / currSimData.numOccs;
+	    		if(this.loadedGenHistData.get(roleIndex).containsKey(genID)) {
+	    			HistoryData currLoadData = this.loadedGenHistData.get(roleIndex).get(genID);
+	    			double loadAvg = ((double)currLoadData.totalReward) / currLoadData.numOccs;
+			    	sameSign = (simAvg-midVal>0) == (loadAvg-midVal>0);
+			    	if(sameSign && Math.abs(loadAvg-midVal)>REWARD_DIF_THRESH) {
+			    		genHistGoodCount++;
+			    	} else if(!sameSign && Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
+			    		genHistBadCount++;
+			    		this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+			    	} else {
+			    		genHistLowConfCount++;
+			    	}
+
+			    	//code copied from heuristic calculation
+	//		    	if(this.genHistoryData.get(roleIndex).containsKey(genID)) {
+	//		    		HistoryData data = this.genHistoryData.get(roleIndex).get(genID);
+	//		    		genHistVal = ((double)data.totalReward) / data.numOccs;
+	//		    		genHistWeight = Math.abs(genHistVal - midVal)/divisor;
+	//		    	}
+	    		} else {
+	    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+	    			if(Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
+	    				genHistBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(genHistGoodCount+genHistBadCount>0 && genHistGoodCount/((double)genHistGoodCount + genHistBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(int genID : this.genHistoryData.get(roleIndex).keySet()) {
+	    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+	    		}
+	    	} else {
+	    		if(genHistGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += genHistGoodCount + " " + genHistBadCount + " * ";
+
+	    	//Specific History
+	    	int specHistGoodCount = 0;
+	    	int specHistBadCount = 0;
+	    	int specHistLowConfCount = 0;
+	    	for(List<Integer> specID : this.historyData.get(roleIndex).keySet()) {
+	    		HistoryData currSimData = this.historyData.get(roleIndex).get(specID);
+	    		double midVal = (MAX_REWARD_VALUE + MIN_REWARD_VALUE) / 2.0;
+		    	double divisor = (MAX_REWARD_VALUE - MIN_REWARD_VALUE) / 2.0;
+		    	double simAvg = ((double)currSimData.totalReward) / currSimData.numOccs;
+	    		if(this.loadedHistData.get(roleIndex).containsKey(specID)) {
+	    			HistoryData currLoadData = this.loadedHistData.get(roleIndex).get(specID);
+	    			double loadAvg = ((double)currLoadData.totalReward) / currLoadData.numOccs;
+			    	sameSign = (simAvg-midVal>0) == (loadAvg-midVal>0);
+			    	if(sameSign && Math.abs(loadAvg-midVal)>REWARD_DIF_THRESH) {
+			    		specHistGoodCount++;
+			    	} else if(!sameSign && Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
+			    		specHistBadCount++;
+			    		this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+			    	} else {
+			    		specHistLowConfCount++;
+			    	}
+	    		} else {
+	    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+	    			if(Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
+	    				specHistBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(specHistGoodCount+specHistBadCount>0 && specHistGoodCount/((double)specHistGoodCount + specHistBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(List<Integer> specID : this.historyData.get(roleIndex).keySet()) {
+	    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+	    		}
+	    	} else {
+	    		if(specHistGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += specHistGoodCount + " " + specHistBadCount + " * ";
+
+	    	//Board Heuristics
+	    	//Centre
+	    	int boardGoodCount = 0;
+	    	int boardBadCount = 0;
+	    	int boardLowConfCount = 0;
+	    	for(int pieceID : this.boardRegression.get(roleIndex).centreDistReg.keySet()) {
+	    		SimpleRegression currSim = this.boardRegression.get(roleIndex).centreDistReg.get(pieceID);
+		    	simR = currSim.getR();
+	    		if(this.loadedBoardRegression.get(roleIndex).centreDistReg.containsKey(pieceID)) {
+	    			RegressionRecord currLoad = this.loadedBoardRegression.get(roleIndex).centreDistReg.get(pieceID);
+	    			loadedR = currLoad.getR();
+	    			sameSign = (simR>0.0) == (loadedR>0.0);
+	    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    	    		boardGoodCount++;
+	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    	    		boardBadCount++;
+	    	    		this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    	} else {
+	    	    		boardLowConfCount++;
+	    	    	}
+	    		} else {
+	    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    			if(Math.abs(simR)>REWARD_DIF_THRESH) {
+	    				boardBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(int pieceID : this.boardRegression.get(roleIndex).centreDistReg.keySet()) {
+	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).centreDistReg.get(pieceID);
+	    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		}
+	    	} else {
+	    		if(boardGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += boardGoodCount + " " + boardBadCount + " * ";
+
+	    	//X-Side
+	    	boardGoodCount = 0;
+	    	boardBadCount = 0;
+	    	boardLowConfCount = 0;
+	    	for(int pieceID : this.boardRegression.get(roleIndex).xSideDistReg.keySet()) {
+	    		SimpleRegression currSim = this.boardRegression.get(roleIndex).xSideDistReg.get(pieceID);
+		    	simR = currSim.getR();
+	    		if(this.loadedBoardRegression.get(roleIndex).xSideDistReg.containsKey(pieceID)) {
+	    			RegressionRecord currLoad = this.loadedBoardRegression.get(roleIndex).xSideDistReg.get(pieceID);
+	    			loadedR = currLoad.getR();
+	    			sameSign = (simR>0.0) == (loadedR>0.0);
+	    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    	    		boardGoodCount++;
+	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    	    		boardBadCount++;
+	    	    		this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    	} else {
+	    	    		boardLowConfCount++;
+	    	    	}
+	    		} else {
+	    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    			if(Math.abs(simR)>REWARD_DIF_THRESH) {
+	    				boardBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(int pieceID : this.boardRegression.get(roleIndex).xSideDistReg.keySet()) {
+	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).xSideDistReg.get(pieceID);
+	    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		}
+	    	} else {
+	    		if(boardGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += boardGoodCount + " " + boardBadCount + " * ";
+
+	    	//Y-Side
+	    	boardGoodCount = 0;
+	    	boardBadCount = 0;
+	    	boardLowConfCount = 0;
+	    	for(int pieceID : this.boardRegression.get(roleIndex).ySideDistReg.keySet()) {
+	    		SimpleRegression currSim = this.boardRegression.get(roleIndex).ySideDistReg.get(pieceID);
+		    	simR = currSim.getR();
+	    		if(this.loadedBoardRegression.get(roleIndex).ySideDistReg.containsKey(pieceID)) {
+	    			RegressionRecord currLoad = this.loadedBoardRegression.get(roleIndex).ySideDistReg.get(pieceID);
+	    			loadedR = currLoad.getR();
+	    			sameSign = (simR>0.0) == (loadedR>0.0);
+	    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    	    		boardGoodCount++;
+	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    	    		boardBadCount++;
+	    	    		this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    	} else {
+	    	    		boardLowConfCount++;
+	    	    	}
+	    		} else {
+	    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    			if(Math.abs(simR)>REWARD_DIF_THRESH) {
+	    				boardBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(int pieceID : this.boardRegression.get(roleIndex).ySideDistReg.keySet()) {
+	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).ySideDistReg.get(pieceID);
+	    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		}
+	    	} else {
+	    		if(boardGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += boardGoodCount + " " + boardBadCount + " * ";
+
+	    	//Corner
+	    	boardGoodCount = 0;
+	    	boardBadCount = 0;
+	    	boardLowConfCount = 0;
+	    	for(int pieceID : this.boardRegression.get(roleIndex).cornerDistReg.keySet()) {
+	    		SimpleRegression currSim = this.boardRegression.get(roleIndex).cornerDistReg.get(pieceID);
+		    	simR = currSim.getR();
+	    		if(this.loadedBoardRegression.get(roleIndex).cornerDistReg.containsKey(pieceID)) {
+	    			RegressionRecord currLoad = this.loadedBoardRegression.get(roleIndex).cornerDistReg.get(pieceID);
+	    			loadedR = currLoad.getR();
+	    			sameSign = (simR>0.0) == (loadedR>0.0);
+	    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+	    	    		boardGoodCount++;
+	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+	    	    		boardBadCount++;
+	    	    		this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    	} else {
+	    	    		boardLowConfCount++;
+	    	    	}
+	    		} else {
+	    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    			if(Math.abs(simR)>REWARD_DIF_THRESH) {
+	    				boardBadCount++;
+	    			}
+	    		}
+	    	}
+	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
+	    		heurCheckStr += "-1 ";
+	    		badCount++;
+	    		for(int pieceID : this.boardRegression.get(roleIndex).cornerDistReg.keySet()) {
+	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).cornerDistReg.get(pieceID);
+	    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		}
+	    	} else {
+	    		if(boardGoodCount>0) {
+	    			goodCount++;
+	    			heurCheckStr += "1 ";
+	    		} else {
+	    			lowConfCount++;
+	    			heurCheckStr += "0 ";
+	    		}
+	    	}
+	    	heurCheckStr += boardGoodCount + " " + boardBadCount + " * ";
+
+	    	//Lines
+	    	for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+		    	boardGoodCount = 0;
+		    	boardBadCount = 0;
+		    	boardLowConfCount = 0;
+		    	for(int pieceID : this.boardRegression.get(roleIndex).lineReg.get(lineIndex).keySet()) {
+		    		SimpleRegression currSim = this.boardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
+			    	simR = currSim.getR();
+		    		if(this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).containsKey(pieceID)) {
+		    			RegressionRecord currLoad = this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
+		    			loadedR = currLoad.getR();
+		    			sameSign = (simR>0.0) == (loadedR>0.0);
+		    	    	if(sameSign && Math.abs(loadedR)>COR_STRENGTH_THRESH) {
+		    	    		boardGoodCount++;
+		    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
+		    	    		boardBadCount++;
+		    	    		this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    	    	} else {
+		    	    		boardLowConfCount++;
+		    	    	}
+		    		} else {
+		    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    			if(Math.abs(simR)>REWARD_DIF_THRESH) {
+		    				boardBadCount++;
+		    			}
+		    		}
+		    	}
+		    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
+		    		heurCheckStr += "-1 ";
+		    		badCount++;
+		    		for(int pieceID : this.boardRegression.get(roleIndex).lineReg.get(lineIndex).keySet()) {
+		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
+		    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    		}
+		    	} else {
+		    		if(boardGoodCount>0) {
+		    			goodCount++;
+		    			heurCheckStr += "1 ";
+		    		} else {
+		    			lowConfCount++;
+		    			heurCheckStr += "0 ";
+		    		}
+		    	}
+		    	heurCheckStr += boardGoodCount + " " + boardBadCount + " * ";
+	    	}
+
+//	    	if(roleIndex < this.allRoles.size() - 1) {
+	    		heurCheckStr += "\n";
+//	    	}
+    	}
+
+    	//Check if we are fully swapping to SI
+    	if(goodCount+badCount>0 && goodCount/((double)goodCount + badCount) < FULL_SI_THRESH) {
+    		heurCheckStr = "swap_yes\n" + heurCheckStr;
+    		for(SymbolCountKey key : this.scRegression.get(roleIndex).regMap.keySet()) {
+    			SimpleRegression currSim = this.scRegression.get(roleIndex).regMap.get(key);
+    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+    		}
+    		this.loadedMobRegression.set(roleIndex, new RegressionRecord(this.mobRegression.get(roleIndex)));
+    		for(int genID : this.genHistoryData.get(roleIndex).keySet()) {
+    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+    		}
+    		for(List<Integer> specID : this.historyData.get(roleIndex).keySet()) {
+    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+    		}
+    		for(int pieceID : this.boardRegression.get(roleIndex).centreDistReg.keySet()) {
+    			SimpleRegression currSim = this.boardRegression.get(roleIndex).centreDistReg.get(pieceID);
+    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+    		}
+    		for(int pieceID : this.boardRegression.get(roleIndex).xSideDistReg.keySet()) {
+    			SimpleRegression currSim = this.boardRegression.get(roleIndex).xSideDistReg.get(pieceID);
+    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+    		}
+    		for(int pieceID : this.boardRegression.get(roleIndex).ySideDistReg.keySet()) {
+    			SimpleRegression currSim = this.boardRegression.get(roleIndex).ySideDistReg.get(pieceID);
+    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+    		}
+    		for(int pieceID : this.boardRegression.get(roleIndex).cornerDistReg.keySet()) {
+    			SimpleRegression currSim = this.boardRegression.get(roleIndex).cornerDistReg.get(pieceID);
+    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+    		}
+    		for(int lineIndex=0;lineIndex+MIN_PIECE_LINE<=MAX_PIECE_LINE;lineIndex++) {
+    			for(int pieceID : this.boardRegression.get(roleIndex).lineReg.get(lineIndex).keySet()) {
+	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
+	    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+	    		}
+    		}
+
+    	} else {
+    		heurCheckStr = "swap_no\n" + heurCheckStr;
+    	}
+    	System.out.println("!!!!!!!!!!!!!! Heuristic Check Results !!!!!!!!!!!!!!");
+    	System.out.println(heurCheckStr);
+    }
+
+    //prepare heuristics, but don't touch structures containing loaded transfer values
+    public void prepUnloadedHeuristics() {
     	this.usefulSymKeys = trimUnchangingSyms();
     	this.scRegression = new ArrayList<SCRegressionContainer>();
     	this.boardRegression = new ArrayList<BoardRegContainer>();
-    	this.loadedBoardRegression = new ArrayList<LoadedBoardRegContainer>();
     	this.mobRegression = new ArrayList<SimpleRegression>();
     	this.nearestWinRegression = new ArrayList<SimpleRegression>();
     	for(int i=0; i<this.allRoles.size(); i++) {
@@ -1516,8 +1968,20 @@ public class TestGamer extends StateMachineGamer
     		this.mobRegression.add(doMobilityRegression(this.mobilityData, i));
     		this.nearestWinRegression.add(doNearestWinRegression(this.root, i));
     		this.boardRegression.add(doBoardRegression(this.boardData, i));
+    	}
+    }
+
+    //Calls all functions that calculate heuristic parameters
+    //Used at the end of the start clock
+    public void prepHeuristics() {
+    	prepUnloadedHeuristics();
+    	this.loadedBoardRegression = new ArrayList<LoadedBoardRegContainer>();
+    	for(int i=0; i<this.allRoles.size(); i++) {
     		this.loadedBoardRegression.add(new LoadedBoardRegContainer(this.boardRegression.get(i)));
     	}
+
+    	this.loadedGenHistData = this.genHistoryData;
+    	this.loadedHistData = this.historyData;
 
     	//FOR TESTING - REMOVE THIS BLOCK
 //    	this.loadedBoardRegression.get(0).lineReg.get(1).put(2, new RegressionRecord(10,0,1000,0.5));
@@ -1526,17 +1990,17 @@ public class TestGamer extends StateMachineGamer
 //		this.loadedBoardRegression.get(1).lineReg.get(1).put(2, new RegressionRecord(-10,100,1000,-0.5));
 		//
 
-		for(int i=0; i<this.allRoles.size(); i++) {
-    		System.out.println("Role " + i + " Heuristics:");
-    		System.out.println(this.loadedBoardRegression.get(i).toString(this.sMap));
-    		if(this.MAX_PIECE_LINE >= 4) {
-	    		Map<Integer, RegressionRecord> fourLineRec = this.loadedBoardRegression.get(i).lineReg.get(2);
-	    		System.out.println("4-line predictions for 0, 1 lines:");
-	    		for(int sym : fourLineRec.keySet()) {
-	    			System.out.println("sym: " + this.sMap.getTargetName(sym) + " 0:" + fourLineRec.get(sym).predict(0) + " 1:" + fourLineRec.get(sym).predict(1));
-	    		}
-    		}
-    	}
+//		for(int i=0; i<this.allRoles.size(); i++) {
+//    		System.out.println("Role " + i + " Heuristics:");
+//    		System.out.println(this.loadedBoardRegression.get(i).toString(this.sMap));
+//    		if(this.MAX_PIECE_LINE >= 4) {
+//	    		Map<Integer, RegressionRecord> fourLineRec = this.loadedBoardRegression.get(i).lineReg.get(2);
+//	    		System.out.println("4-line predictions for 0, 1 lines:");
+//	    		for(int sym : fourLineRec.keySet()) {
+//	    			System.out.println("sym: " + this.sMap.getTargetName(sym) + " 0:" + fourLineRec.get(sym).predict(0) + " 1:" + fourLineRec.get(sym).predict(1));
+//	    		}
+//    		}
+//    	}
 
     	this.heuristicsReady = true;
     }
@@ -2797,7 +3261,7 @@ public class TestGamer extends StateMachineGamer
     	}
 
     	if(this.numRollouts % 10 == 0) {
-    		System.out.println(LOAD_HEUR_FILE + " " + SELECTION_HEURISTIC + " " + ROLLOUT_ORDERING + " " + EARLY_ROLLOUT_EVAL + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
+    		System.out.println(LOAD_HEUR_FILE + " " + SELECTION_HEURISTIC + " " + DISCARD_BAD_HEURISTICS + " " + EARLY_ROLLOUT_EVAL + " " + this.getRole() + " " + this.numRollouts + " rollouts. " + (System.currentTimeMillis() - this.startTime) + " ms.");
     	}
 
     	return currNode;
@@ -3116,6 +3580,9 @@ public class TestGamer extends StateMachineGamer
 	            fr = new FileWriter(file);
 	            br = new BufferedWriter(fr, RuleGraphRecord.BUFFER_SIZE);
 	            br.write(summaryLine);
+	            if(!this.heurCheckStr.equals("")) {
+	            	br.write(this.heurCheckStr);
+	            }
 	            br.write(outStr);
 	        } catch (IOException e) {
 	            e.printStackTrace();
@@ -3133,6 +3600,9 @@ public class TestGamer extends StateMachineGamer
 	        try {
 	            FileWriter fw = new FileWriter(EXPERIMENT_SAVE_DIR + "/" + EXP_SUMMARY_FILE,true); //the true will append the new data
 	            fw.write(summaryLine);
+	            if(!this.heurCheckStr.equals("")) {
+	            	fw.write(this.heurCheckStr);
+	            }
 	            fw.close();
 	        }
 	        catch(IOException e) {
@@ -3291,6 +3761,8 @@ public class TestGamer extends StateMachineGamer
 		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.loadedHistData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.loadedGenHistData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
@@ -3314,6 +3786,7 @@ public class TestGamer extends StateMachineGamer
 		this.yPosChain = null;
 		this.xLookup = new HashMap<Integer,Integer>();
 		this.yLookup = new HashMap<Integer,Integer>();
+		this.heurCheckStr = "";
 
 		System.out.println("All cleaned up.");
     }
@@ -3351,6 +3824,8 @@ public class TestGamer extends StateMachineGamer
 		this.boardCache = new HashMap<Set<List<Integer>>, Board>();
 		this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
 		this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
+		this.loadedHistData = new ArrayList<Map<List<Integer>, HistoryData>>();
+		this.loadedGenHistData = new ArrayList<Map<Integer, HistoryData>>();
 		this.playedMoves = new ArrayList<Set<List<Integer>>>();
 		this.compiledSCData = new HashMap<SymbolCountKey, List<SymbolCountHeurData>>();
 		this.compiledMobData = new ArrayList<MobilityHeurData>();
@@ -3374,6 +3849,7 @@ public class TestGamer extends StateMachineGamer
 		this.yPosChain = null;
 		this.xLookup = new HashMap<Integer,Integer>();
 		this.yLookup = new HashMap<Integer,Integer>();
+		this.heurCheckStr = "";
     }
 
 
@@ -3390,10 +3866,10 @@ public class TestGamer extends StateMachineGamer
     	this.loadedSCRegression = new ArrayList<LoadedSCRegContainer>();
     	this.loadedMobRegression = new ArrayList<RegressionRecord>();
     	this.loadedNWRegression = new ArrayList<RegressionRecord>();
-    	this.genHistoryData = new ArrayList<Map<Integer, HistoryData>>();
-    	this.historyData = new ArrayList<Map<List<Integer>, HistoryData>>();
+    	this.loadedGenHistData = new ArrayList<Map<Integer, HistoryData>>();
+    	this.loadedHistData = new ArrayList<Map<List<Integer>, HistoryData>>();
     	this.loadedBoardRegression = new ArrayList<LoadedBoardRegContainer>();
-    	loadHeuristicFile(inFileName, this.sMap, this.loadedSCRegression, this.loadedMobRegression, this.loadedNWRegression, this.genHistoryData, this.historyData, this.loadedBoardRegression);
+    	loadHeuristicFile(inFileName, this.sMap, this.loadedSCRegression, this.loadedMobRegression, this.loadedNWRegression, this.loadedGenHistData, this.loadedHistData, this.loadedBoardRegression);
     	this.heuristicsReady = true;
     }
 
