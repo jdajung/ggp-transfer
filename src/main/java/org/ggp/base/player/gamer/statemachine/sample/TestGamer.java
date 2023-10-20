@@ -123,6 +123,7 @@ public class TestGamer extends StateMachineGamer
 	public boolean NW_ENABLED;
 	public boolean SELECTION_HEURISTIC;
 	public boolean DISCARD_BAD_HEURISTICS;
+	public boolean PARTIAL_HEUR_REPLACE;
 	public boolean EARLY_ROLLOUT_EVAL;
 	public double PLAY_TRANSFER_RATIO = 0.5;
 	public boolean LOAD_HEUR_FILE;
@@ -246,10 +247,11 @@ public class TestGamer extends StateMachineGamer
 	public void initParams(List<?> params) {
 		this.NW_ENABLED = false;
 		this.ROLLOUT_ORDERING = false;
+		this.EARLY_ROLLOUT_EVAL = false;
 		this.HEURISTIC_DECAY = (Double)(params.get(0));
 		this.SELECTION_HEURISTIC = (Boolean)(params.get(1));
 		this.DISCARD_BAD_HEURISTICS = (Boolean)(params.get(2));
-		this.EARLY_ROLLOUT_EVAL = (Boolean)(params.get(3));
+		this.PARTIAL_HEUR_REPLACE = (Boolean)(params.get(3));
 		this.LOAD_HEUR_FILE = (Boolean)(params.get(4));
 		this.RULE_GRAPH_FILE = (String)(params.get(5));
 		this.SAVE_RULE_GRAPH_TO_FILE = (Boolean)(params.get(6));
@@ -1541,7 +1543,9 @@ public class TestGamer extends StateMachineGamer
 	    	    		symGoodCount++;
 	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    	    		symBadCount++;
-	    	    		this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    	    		if(PARTIAL_HEUR_REPLACE) {
+	    	    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    	    		}
 	    	    	} else {
 	    	    		symLowConfCount++;
 	    	    	}
@@ -1555,9 +1559,11 @@ public class TestGamer extends StateMachineGamer
 	    	if(symGoodCount+symBadCount>0 && symGoodCount/((double)symGoodCount + symBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(SymbolCountKey key : this.scRegression.get(roleIndex).regMap.keySet()) {
-	    			SimpleRegression currSim = this.scRegression.get(roleIndex).regMap.get(key);
-	    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(SymbolCountKey key : this.scRegression.get(roleIndex).regMap.keySet()) {
+		    			SimpleRegression currSim = this.scRegression.get(roleIndex).regMap.get(key);
+		    			this.loadedSCRegression.get(roleIndex).regMap.put(key, new RegressionRecord(currSim));
+		    		}
 	    		}
 	    	} else {
 	    		if(symGoodCount>0) {
@@ -1580,7 +1586,9 @@ public class TestGamer extends StateMachineGamer
 	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    		badCount++;
 	    		heurCheckStr += "-1 ";
-	    		this.loadedMobRegression.set(roleIndex, new RegressionRecord(this.mobRegression.get(roleIndex)));
+	    		if(PARTIAL_HEUR_REPLACE) {
+	    			this.loadedMobRegression.set(roleIndex, new RegressionRecord(this.mobRegression.get(roleIndex)));
+	    		}
 	    	} else {
 	    		lowConfCount++;
 	    		heurCheckStr += "0 ";
@@ -1604,7 +1612,9 @@ public class TestGamer extends StateMachineGamer
 			    		genHistGoodCount++;
 			    	} else if(!sameSign && Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
 			    		genHistBadCount++;
-			    		this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+			    		if(PARTIAL_HEUR_REPLACE) {
+			    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+			    		}
 			    	} else {
 			    		genHistLowConfCount++;
 			    	}
@@ -1625,8 +1635,10 @@ public class TestGamer extends StateMachineGamer
 	    	if(genHistGoodCount+genHistBadCount>0 && genHistGoodCount/((double)genHistGoodCount + genHistBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(int genID : this.genHistoryData.get(roleIndex).keySet()) {
-	    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(int genID : this.genHistoryData.get(roleIndex).keySet()) {
+		    			this.loadedGenHistData.get(roleIndex).put(genID, this.genHistoryData.get(roleIndex).get(genID));
+		    		}
 	    		}
 	    	} else {
 	    		if(genHistGoodCount>0) {
@@ -1656,7 +1668,9 @@ public class TestGamer extends StateMachineGamer
 			    		specHistGoodCount++;
 			    	} else if(!sameSign && Math.abs(simAvg-midVal)>REWARD_DIF_THRESH) {
 			    		specHistBadCount++;
-			    		this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+			    		if(PARTIAL_HEUR_REPLACE) {
+			    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+			    		}
 			    	} else {
 			    		specHistLowConfCount++;
 			    	}
@@ -1670,8 +1684,10 @@ public class TestGamer extends StateMachineGamer
 	    	if(specHistGoodCount+specHistBadCount>0 && specHistGoodCount/((double)specHistGoodCount + specHistBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(List<Integer> specID : this.historyData.get(roleIndex).keySet()) {
-	    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(List<Integer> specID : this.historyData.get(roleIndex).keySet()) {
+		    			this.loadedHistData.get(roleIndex).put(specID, this.historyData.get(roleIndex).get(specID));
+		    		}
 	    		}
 	    	} else {
 	    		if(specHistGoodCount>0) {
@@ -1700,7 +1716,9 @@ public class TestGamer extends StateMachineGamer
 	    	    		boardGoodCount++;
 	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    	    		boardBadCount++;
-	    	    		this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		if(PARTIAL_HEUR_REPLACE) {
+	    	    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		}
 	    	    	} else {
 	    	    		boardLowConfCount++;
 	    	    	}
@@ -1714,9 +1732,11 @@ public class TestGamer extends StateMachineGamer
 	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(int pieceID : this.boardRegression.get(roleIndex).centreDistReg.keySet()) {
-	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).centreDistReg.get(pieceID);
-	    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(int pieceID : this.boardRegression.get(roleIndex).centreDistReg.keySet()) {
+		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).centreDistReg.get(pieceID);
+		    			this.loadedBoardRegression.get(roleIndex).centreDistReg.put(pieceID, new RegressionRecord(currSim));
+		    		}
 	    		}
 	    	} else {
 	    		if(boardGoodCount>0) {
@@ -1744,7 +1764,9 @@ public class TestGamer extends StateMachineGamer
 	    	    		boardGoodCount++;
 	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    	    		boardBadCount++;
-	    	    		this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		if(PARTIAL_HEUR_REPLACE) {
+	    	    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		}
 	    	    	} else {
 	    	    		boardLowConfCount++;
 	    	    	}
@@ -1758,9 +1780,11 @@ public class TestGamer extends StateMachineGamer
 	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(int pieceID : this.boardRegression.get(roleIndex).xSideDistReg.keySet()) {
-	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).xSideDistReg.get(pieceID);
-	    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(int pieceID : this.boardRegression.get(roleIndex).xSideDistReg.keySet()) {
+		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).xSideDistReg.get(pieceID);
+		    			this.loadedBoardRegression.get(roleIndex).xSideDistReg.put(pieceID, new RegressionRecord(currSim));
+		    		}
 	    		}
 	    	} else {
 	    		if(boardGoodCount>0) {
@@ -1788,7 +1812,9 @@ public class TestGamer extends StateMachineGamer
 	    	    		boardGoodCount++;
 	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    	    		boardBadCount++;
-	    	    		this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		if(PARTIAL_HEUR_REPLACE) {
+	    	    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		}
 	    	    	} else {
 	    	    		boardLowConfCount++;
 	    	    	}
@@ -1802,9 +1828,11 @@ public class TestGamer extends StateMachineGamer
 	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(int pieceID : this.boardRegression.get(roleIndex).ySideDistReg.keySet()) {
-	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).ySideDistReg.get(pieceID);
-	    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(int pieceID : this.boardRegression.get(roleIndex).ySideDistReg.keySet()) {
+		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).ySideDistReg.get(pieceID);
+		    			this.loadedBoardRegression.get(roleIndex).ySideDistReg.put(pieceID, new RegressionRecord(currSim));
+		    		}
 	    		}
 	    	} else {
 	    		if(boardGoodCount>0) {
@@ -1832,7 +1860,9 @@ public class TestGamer extends StateMachineGamer
 	    	    		boardGoodCount++;
 	    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 	    	    		boardBadCount++;
-	    	    		this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		if(PARTIAL_HEUR_REPLACE) {
+	    	    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    	    		}
 	    	    	} else {
 	    	    		boardLowConfCount++;
 	    	    	}
@@ -1846,9 +1876,11 @@ public class TestGamer extends StateMachineGamer
 	    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
 	    		heurCheckStr += "-1 ";
 	    		badCount++;
-	    		for(int pieceID : this.boardRegression.get(roleIndex).cornerDistReg.keySet()) {
-	    			SimpleRegression currSim = this.boardRegression.get(roleIndex).cornerDistReg.get(pieceID);
-	    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+	    		if(PARTIAL_HEUR_REPLACE) {
+		    		for(int pieceID : this.boardRegression.get(roleIndex).cornerDistReg.keySet()) {
+		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).cornerDistReg.get(pieceID);
+		    			this.loadedBoardRegression.get(roleIndex).cornerDistReg.put(pieceID, new RegressionRecord(currSim));
+		    		}
 	    		}
 	    	} else {
 	    		if(boardGoodCount>0) {
@@ -1877,7 +1909,9 @@ public class TestGamer extends StateMachineGamer
 		    	    		boardGoodCount++;
 		    	    	} else if(!sameSign && Math.abs(simR)>COR_STRENGTH_THRESH) {
 		    	    		boardBadCount++;
-		    	    		this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    	    		if(PARTIAL_HEUR_REPLACE) {
+		    	    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    	    		}
 		    	    	} else {
 		    	    		boardLowConfCount++;
 		    	    	}
@@ -1891,9 +1925,11 @@ public class TestGamer extends StateMachineGamer
 		    	if(boardGoodCount+boardBadCount>0 && boardGoodCount/((double)boardGoodCount + boardBadCount) < FULL_SI_THRESH) {
 		    		heurCheckStr += "-1 ";
 		    		badCount++;
-		    		for(int pieceID : this.boardRegression.get(roleIndex).lineReg.get(lineIndex).keySet()) {
-		    			SimpleRegression currSim = this.boardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
-		    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+		    		if(PARTIAL_HEUR_REPLACE) {
+			    		for(int pieceID : this.boardRegression.get(roleIndex).lineReg.get(lineIndex).keySet()) {
+			    			SimpleRegression currSim = this.boardRegression.get(roleIndex).lineReg.get(lineIndex).get(pieceID);
+			    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
+			    		}
 		    		}
 		    	} else {
 		    		if(boardGoodCount>0) {
