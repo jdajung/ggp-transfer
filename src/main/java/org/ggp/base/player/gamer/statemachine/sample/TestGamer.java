@@ -1984,7 +1984,10 @@ public class TestGamer extends StateMachineGamer
 	    			this.loadedBoardRegression.get(roleIndex).lineReg.get(lineIndex).put(pieceID, new RegressionRecord(currSim));
 	    		}
     		}
-
+    		root = new MCTNode(this.getCurrentState(), this.getStateMachine(), sMap, null);
+        	root.genStateSet();
+        	root.expandChildren();
+        	this.boardCache = new HashMap<Set<List<Integer>>, Board>();
     	} else {
     		heurCheckStr = "swap_no\n" + heurCheckStr;
     	}
