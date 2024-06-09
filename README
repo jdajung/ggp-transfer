@@ -1,4 +1,4 @@
-These are the files associated with my thesis, "Graph-Based Mapping for Knowledge Transfer in General Game Playing".
+These are the files associated with the CoG 2024 paper "Heuristic Knowledge Transfer for General Game Playing", and also my PhD thesis, "Graph-Based Mapping for Knowledge Transfer in General Game Playing".
 If you have questions regarding this code or the underlying methods, I can be contacted at joshjung(at)live.ca
 
 This project is dependent on Stanford's ggp-base repository, which can be found at: https://github.com/ggp-org/ggp-base
