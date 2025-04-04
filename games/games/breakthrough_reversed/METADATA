@@ -1,0 +1,7 @@
+{
+  "gameName": "Breakthrough Suicide",  
+  "rulesheet": "breakthroughreversed.kif",  
+  "stylesheet": "breakthroughreversed.xsl",
+  "description": "breakthroughreversed.txt",
+  "user_interface": "breakthroughreversed.js"
+}
